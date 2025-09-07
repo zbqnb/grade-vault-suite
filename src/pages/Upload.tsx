@@ -1,8 +1,93 @@
-import { Upload as UploadIcon, FileText, Users, BookOpen, BarChart3 } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Upload as UploadIcon, FileText, Users, BookOpen, BarChart3, Settings } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { FileUpload } from "@/components/ui/file-upload";
+import { useExcelParser } from "@/hooks/useExcelParser";
+import { useToast } from "@/hooks/use-toast";
 
 const Upload = () => {
+  const [selectedSchool, setSelectedSchool] = useState("");
+  const [selectedGrade, setSelectedGrade] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedType, setSelectedType] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  
+  const { parseExcelFile, isLoading } = useExcelParser();
+  const { toast } = useToast();
+
+  // 学校选项
+  const schools = [
+    "沈阳市实验学校",
+    "沈阳市实验学校旭东中学", 
+    "沈阳市实验学校于洪分校"
+  ];
+
+  // 年级选项
+  const grades = [
+    "初中一年级",
+    "初中二年级", 
+    "初中三年级"
+  ];
+
+  // 月份选项 
+  const months = Array.from({ length: 12 }, (_, i) => ({
+    value: (i + 1).toString(),
+    label: `${i + 1}月`
+  }));
+
+  // 考试类型选项
+  const examTypes = ["月考", "期中", "期末", "生地"];
+
+  // 计算当前学年
+  const currentAcademicYear = useMemo(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    
+    // 如果当前月份在9月之后，学年为当前年份到下一年份
+    if (currentMonth >= 9) {
+      return `${currentYear}-${currentYear + 1}`;
+    } else {
+      return `${currentYear - 1}-${currentYear}`;
+    }
+  }, []);
+
+  // 检查是否所有筛选条件都已选择
+  const isFilterComplete = selectedSchool && selectedGrade && selectedMonth && selectedType;
+
+  const handleFileSelect = (file: File) => {
+    setSelectedFile(file);
+  };
+
+  const handleUpload = async () => {
+    if (!selectedFile || !isFilterComplete) {
+      toast({
+        title: "上传失败",
+        description: "请先完成所有筛选条件的选择和文件选择",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await parseExcelFile(selectedFile, {
+        schoolName: selectedSchool,
+        academicYear: currentAcademicYear,
+        gradeLevel: selectedGrade,
+        month: parseInt(selectedMonth),
+        assessmentType: selectedType
+      });
+      
+      // 重置表单
+      setSelectedFile(null);
+    } catch (error) {
+      // 错误已在hook中处理
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -15,7 +100,7 @@ const Upload = () => {
             </div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Users className="h-4 w-4" />
-              <span>当前学期：2024春季</span>
+              <span>当前学年：{currentAcademicYear}</span>
             </div>
           </div>
         </div>
@@ -25,32 +110,135 @@ const Upload = () => {
       <main className="container mx-auto px-6 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Upload Area */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 space-y-6">
+            {/* Filter Section */}
             <Card className="card-hover">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-xl">
-                  <UploadIcon className="h-5 w-5 text-primary" />
-                  文件上传
+                  <Settings className="h-5 w-5 text-primary" />
+                  上传设置
                 </CardTitle>
                 <CardDescription className="text-base">
-                  支持Excel、CSV格式的成绩数据文件
+                  请先选择以下筛选条件，确定成绩数据的归属信息
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="border-2 border-dashed border-muted rounded-lg p-12 text-center hover:border-primary/50 transition-colors">
-                  <UploadIcon className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-medium mb-2">拖拽文件到此处</h3>
-                  <p className="text-muted-foreground mb-4">或点击选择文件上传</p>
-                  <Button variant="outline" size="lg" className="text-base px-8">
-                    选择文件
-                  </Button>
-                  <div className="mt-4 text-sm text-muted-foreground">
-                    <p>支持的格式：.xlsx, .xls, .csv</p>
-                    <p>最大文件大小：10MB</p>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="school-select" className="text-base font-medium">学校名称</Label>
+                    <Select value={selectedSchool} onValueChange={setSelectedSchool}>
+                      <SelectTrigger id="school-select">
+                        <SelectValue placeholder="选择学校" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {schools.map((school) => (
+                          <SelectItem key={school} value={school}>
+                            {school}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="grade-select" className="text-base font-medium">年级</Label>
+                    <Select value={selectedGrade} onValueChange={setSelectedGrade}>
+                      <SelectTrigger id="grade-select">
+                        <SelectValue placeholder="选择年级" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {grades.map((grade) => (
+                          <SelectItem key={grade} value={grade}>
+                            {grade}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="month-select" className="text-base font-medium">月份</Label>
+                    <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                      <SelectTrigger id="month-select">
+                        <SelectValue placeholder="选择月份" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {months.map((month) => (
+                          <SelectItem key={month.value} value={month.value}>
+                            {month.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="type-select" className="text-base font-medium">考试类型</Label>
+                    <Select value={selectedType} onValueChange={setSelectedType}>
+                      <SelectTrigger id="type-select">
+                        <SelectValue placeholder="选择考试类型" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {examTypes.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {type}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-base font-medium">学年</Label>
+                    <div className="h-10 px-3 py-2 border border-input bg-background rounded-md flex items-center text-sm text-muted-foreground">
+                      {currentAcademicYear}
+                    </div>
                   </div>
                 </div>
+
+                {isFilterComplete && (
+                  <div className="p-4 bg-accent-soft rounded-lg border border-accent/20">
+                    <p className="text-sm text-accent-foreground">
+                      ✓ 筛选条件已完成，现在可以上传文件
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
+
+            {/* Upload Section */}
+            {isFilterComplete && (
+              <Card className="card-hover">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-xl">
+                    <UploadIcon className="h-5 w-5 text-primary" />
+                    文件上传
+                  </CardTitle>
+                  <CardDescription className="text-base">
+                    支持Excel、CSV格式的成绩数据文件
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <FileUpload
+                    onFileSelect={handleFileSelect}
+                    disabled={isLoading}
+                  />
+                  
+                  {selectedFile && (
+                    <div className="flex justify-end">
+                      <Button 
+                        onClick={handleUpload}
+                        disabled={isLoading}
+                        size="lg"
+                        className="px-8"
+                      >
+                        {isLoading ? "上传中..." : "开始上传"}
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Upload History */}
             <Card className="mt-6">
