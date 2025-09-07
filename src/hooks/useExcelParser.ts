@@ -9,6 +9,7 @@ interface ParsedRecord {
   className: string;
   subjectName: string;
   scoreValue: number;
+  schoolName: string;
 }
 
 interface UploadMetadata {
@@ -54,7 +55,6 @@ export const useExcelParser = () => {
 
       // 解析数据行（从第4行开始）
       const records: ParsedRecord[] = [];
-      const schoolNames = new Set<string>();
       
       for (let row = 3; row < jsonData.length; row++) { // 从第4行开始（索引3）
         const rowData = jsonData[row];
@@ -67,8 +67,6 @@ export const useExcelParser = () => {
         const studentNumber = rowData[3]; // D列
         
         if (!schoolName || !studentName || !className || !studentNumber) continue;
-        
-        schoolNames.add(schoolName);
 
         // 处理成绩数据
         for (const [colIndex, mapping] of Object.entries(columnMapping)) {
@@ -84,7 +82,8 @@ export const useExcelParser = () => {
                 studentName,
                 className,
                 subjectName: mapping.subject,
-                scoreValue
+                scoreValue,
+                schoolName
               });
             }
           }
@@ -95,15 +94,8 @@ export const useExcelParser = () => {
         throw new Error('未找到有效的成绩数据');
       }
 
-      // 验证学校名称一致性
-      if (schoolNames.size > 1) {
-        throw new Error(`文件中包含多个学校数据：${Array.from(schoolNames).join(', ')}`);
-      }
-      
-      const schoolName = Array.from(schoolNames)[0];
-
       // 保存到数据库
-      await saveToDatabase(records, { ...metadata, schoolName });
+      await saveToDatabase(records, metadata);
       
       toast({
         title: "上传成功",
@@ -125,53 +117,69 @@ export const useExcelParser = () => {
     }
   };
 
-  const saveToDatabase = async (records: ParsedRecord[], metadata: UploadMetadata & { schoolName: string }) => {
+  const saveToDatabase = async (records: ParsedRecord[], metadata: UploadMetadata) => {
     try {
-      // 1. 确保学校存在
-      let { data: school } = await supabase
-        .from('schools')
-        .select('id')
-        .eq('name', metadata.schoolName)
-        .single();
-
-      if (!school) {
-        const { data: newSchool, error } = await supabase
+      // 1. 获取所有学校并创建映射
+      const uniqueSchools = [...new Set(records.map(r => r.schoolName))];
+      const schoolMap = new Map<string, number>();
+      
+      for (const schoolName of uniqueSchools) {
+        let { data: school } = await supabase
           .from('schools')
-          .insert({ name: metadata.schoolName })
           .select('id')
-          .single();
+          .eq('name', schoolName)
+          .maybeSingle();
+
+        if (!school) {
+          const { data: newSchool, error } = await supabase
+            .from('schools')
+            .insert({ name: schoolName })
+            .select('id')
+            .single();
+          
+          if (error) throw error;
+          school = newSchool;
+        }
         
-        if (error) throw error;
-        school = newSchool;
+        schoolMap.set(schoolName, school.id);
       }
 
-      // 2. 创建评估记录
-      const { data: assessment, error: assessmentError } = await supabase
-        .from('assessments')
-        .insert({
-          school_id: school.id,
-          academic_year: metadata.academicYear,
-          grade_level: metadata.gradeLevel,
-          month: metadata.month,
-          type: metadata.assessmentType
-        })
-        .select('id')
-        .single();
+      // 2. 为每个学校创建评估记录
+      const assessmentMap = new Map<string, number>();
+      
+      for (const schoolName of uniqueSchools) {
+        const schoolId = schoolMap.get(schoolName)!;
+        const { data: assessment, error: assessmentError } = await supabase
+          .from('assessments')
+          .insert({
+            school_id: schoolId,
+            academic_year: metadata.academicYear,
+            grade_level: metadata.gradeLevel,
+            month: metadata.month,
+            type: metadata.assessmentType
+          })
+          .select('id')
+          .single();
 
-      if (assessmentError) throw assessmentError;
+        if (assessmentError) throw assessmentError;
+        assessmentMap.set(schoolName, assessment.id);
+      }
 
       // 3. 批量处理学生、班级、科目数据
-      const uniqueClasses = [...new Set(records.map(r => r.className))];
+      const uniqueClasses = [...new Set(records.map(r => `${r.className}_${r.schoolName}`))];
       const uniqueSubjects = [...new Set(records.map(r => r.subjectName))];
-      const uniqueStudents = [...new Set(records.map(r => ({ number: r.studentNumber, name: r.studentName, className: r.className })))];
+      const uniqueStudents = [...new Set(records.map(r => ({ number: r.studentNumber, name: r.studentName, className: r.className, schoolName: r.schoolName })))];
 
       // 创建班级
-      for (const className of uniqueClasses) {
+      for (const classKey of uniqueClasses) {
+        const [className, schoolName] = classKey.split('_');
+        const schoolId = schoolMap.get(schoolName)!;
+        
         await supabase
           .from('classes')
           .upsert({
             name: className,
-            school_id: school.id,
+            school_id: schoolId,
             academic_year: metadata.academicYear,
             grade_level: metadata.gradeLevel
           }, {
@@ -189,20 +197,20 @@ export const useExcelParser = () => {
       // 获取班级和科目ID映射
       const { data: classes } = await supabase
         .from('classes')
-        .select('id, name')
-        .eq('school_id', school.id)
+        .select('id, name, school_id')
         .eq('academic_year', metadata.academicYear);
 
       const { data: subjects } = await supabase
         .from('subjects')
         .select('id, name');
 
-      const classMap = new Map(classes?.map(c => [c.name, c.id]) || []);
+      const classMap = new Map(classes?.map(c => [`${c.name}_${c.school_id}`, c.id]) || []);
       const subjectMap = new Map(subjects?.map(s => [s.name, s.id]) || []);
 
       // 创建学生
       for (const student of uniqueStudents) {
-        const classId = classMap.get(student.className);
+        const schoolId = schoolMap.get(student.schoolName)!;
+        const classId = classMap.get(`${student.className}_${schoolId}`);
         if (classId) {
           await supabase
             .from('students')
@@ -225,14 +233,16 @@ export const useExcelParser = () => {
 
       // 4. 插入成绩数据
       const scoreInserts = records.map(record => {
-        const classId = classMap.get(record.className);
+        const schoolId = schoolMap.get(record.schoolName)!;
+        const classId = classMap.get(`${record.className}_${schoolId}`);
         const subjectId = subjectMap.get(record.subjectName);
         const studentId = studentMap.get(`${record.studentNumber}_${classId}`);
+        const assessmentId = assessmentMap.get(record.schoolName)!;
 
         return {
           student_id: studentId,
           subject_id: subjectId,
-          assessment_id: assessment.id,
+          assessment_id: assessmentId,
           score_value: record.scoreValue
         };
       }).filter(insert => insert.student_id && insert.subject_id);
