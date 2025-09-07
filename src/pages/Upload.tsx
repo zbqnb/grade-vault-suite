@@ -9,7 +9,6 @@ import { useExcelParser } from "@/hooks/useExcelParser";
 import { useToast } from "@/hooks/use-toast";
 
 const Upload = () => {
-  const [selectedSchool, setSelectedSchool] = useState("");
   const [selectedGrade, setSelectedGrade] = useState("");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedType, setSelectedType] = useState("");
@@ -17,13 +16,6 @@ const Upload = () => {
   
   const { parseExcelFile, isLoading } = useExcelParser();
   const { toast } = useToast();
-
-  // 学校选项
-  const schools = [
-    "沈阳市实验学校",
-    "沈阳市实验学校旭东中学", 
-    "沈阳市实验学校于洪分校"
-  ];
 
   // 年级选项
   const grades = [
@@ -56,7 +48,7 @@ const Upload = () => {
   }, []);
 
   // 检查是否所有筛选条件都已选择
-  const isFilterComplete = selectedSchool && selectedGrade && selectedMonth && selectedType;
+  const isFilterComplete = selectedGrade && selectedMonth && selectedType;
 
   const handleFileSelect = (file: File) => {
     setSelectedFile(file);
@@ -74,7 +66,6 @@ const Upload = () => {
 
     try {
       await parseExcelFile(selectedFile, {
-        schoolName: selectedSchool,
         academicYear: currentAcademicYear,
         gradeLevel: selectedGrade,
         month: parseInt(selectedMonth),
@@ -123,23 +114,7 @@ const Upload = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="school-select" className="text-base font-medium">学校名称</Label>
-                    <Select value={selectedSchool} onValueChange={setSelectedSchool}>
-                      <SelectTrigger id="school-select">
-                        <SelectValue placeholder="选择学校" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {schools.map((school) => (
-                          <SelectItem key={school} value={school}>
-                            {school}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="grade-select" className="text-base font-medium">年级</Label>
                     <Select value={selectedGrade} onValueChange={setSelectedGrade}>

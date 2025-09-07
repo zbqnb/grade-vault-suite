@@ -12,7 +12,6 @@ interface ParsedRecord {
 }
 
 interface UploadMetadata {
-  schoolName: string;
   academicYear: string;
   gradeLevel: string;
   month: number;
@@ -55,17 +54,21 @@ export const useExcelParser = () => {
 
       // 解析数据行（从第4行开始）
       const records: ParsedRecord[] = [];
+      const schoolNames = new Set<string>();
       
       for (let row = 3; row < jsonData.length; row++) { // 从第4行开始（索引3）
         const rowData = jsonData[row];
         
         if (!rowData || rowData.length < 4) continue;
         
-        const studentName = rowData[1]; // B列
-        const className = rowData[2];   // C列  
+        const schoolName = rowData[0];    // A列
+        const studentName = rowData[1];   // B列
+        const className = rowData[2];     // C列  
         const studentNumber = rowData[3]; // D列
         
-        if (!studentName || !className || !studentNumber) continue;
+        if (!schoolName || !studentName || !className || !studentNumber) continue;
+        
+        schoolNames.add(schoolName);
 
         // 处理成绩数据
         for (const [colIndex, mapping] of Object.entries(columnMapping)) {
@@ -92,8 +95,15 @@ export const useExcelParser = () => {
         throw new Error('未找到有效的成绩数据');
       }
 
+      // 验证学校名称一致性
+      if (schoolNames.size > 1) {
+        throw new Error(`文件中包含多个学校数据：${Array.from(schoolNames).join(', ')}`);
+      }
+      
+      const schoolName = Array.from(schoolNames)[0];
+
       // 保存到数据库
-      await saveToDatabase(records, metadata);
+      await saveToDatabase(records, { ...metadata, schoolName });
       
       toast({
         title: "上传成功",
@@ -115,7 +125,7 @@ export const useExcelParser = () => {
     }
   };
 
-  const saveToDatabase = async (records: ParsedRecord[], metadata: UploadMetadata) => {
+  const saveToDatabase = async (records: ParsedRecord[], metadata: UploadMetadata & { schoolName: string }) => {
     try {
       // 1. 确保学校存在
       let { data: school } = await supabase
