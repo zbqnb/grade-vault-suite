@@ -41,17 +41,26 @@ export const useExcelParser = () => {
       const subjectRow = jsonData[1]; // 第2行
       const metricRow = jsonData[2];  // 第3行
       
+      // --- 修正部分开始 ---
       // 建立列映射
       const columnMapping: { [key: number]: { subject: string; metric: string } } = {};
-      
-      for (let col = 4; col < subjectRow.length; col++) { // 从E列(索引4)开始
-        const subject = subjectRow[col];
+      let currentSubject = ''; // 用于处理合并单元格的变量
+
+      // 从E列(索引4)开始, 循环以指标行的长度为准
+      for (let col = 4; col < metricRow.length; col++) {
+        // 如果当前列在科目行有值，说明这是一个新科目的开始，更新currentSubject
+        if (subjectRow[col]) {
+          currentSubject = subjectRow[col];
+        }
+        
         const metric = metricRow[col];
         
-        if (subject && metric) {
-          columnMapping[col] = { subject, metric };
+        // 只要有“记住”的科目和当前指标名称，就创建映射
+        if (currentSubject && metric) {
+          columnMapping[col] = { subject: currentSubject, metric };
         }
       }
+      // --- 修正部分结束 ---
 
       // 解析数据行（从第4行开始）
       const records: ParsedRecord[] = [];
