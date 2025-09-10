@@ -2,7 +2,7 @@ import { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-
+import { SupabaseClient } from '@supabase/supabase-js'; // 建議導入類型以獲得更好的TS支持
 
 interface ParsedRecord {
   studentNumber: string;
@@ -28,93 +28,111 @@ export const useExcelParser = () => {
     setIsLoading(true);
     
     try {
+      // 1. 讀取 Excel 文件
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data, { type: 'array' });
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      
-      const header = XLSX.utils.sheet_to_json(worksheet, { 
-        header: 1,
-        range: 1 // 只讀取第2行，即科目行
-      })[0] as any[];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
 
-      const subHeader = XLSX.utils.sheet_to_json(worksheet, { 
-        header: 1,
-        range: 2 // 只讀取第3行，即指標行
-      })[0] as any[];
-
-      const body = XLSX.utils.sheet_to_json(worksheet, { 
-        header: 1,
-        range: 3 // 從第4行開始讀取為數據體
-      }) as any[][];
-
-      if (body.length < 1) {
-        throw new Error('文件格式不正確，未找到有效的學生數據');
+      if (jsonData.length < 4) {
+        throw new Error('文件格式不正確，至少需要4行數據');
       }
 
+      // 2. 解析多級標題行
+      const subjectRow = jsonData[1]; // 第2行 (主標題 - 科目)
+      const metricRow = jsonData[2];  // 第3行 (子標題 - 指標)
+      
+      // --- 核心解析邏輯修正 ---
+      // 能夠正確處理第2行合併儲存格的情況
       const columnMapping: { [key: number]: { subject: string; metric: string } } = {};
       let currentSubject = ''; 
 
-      for (let col = 4; col < subHeader.length; col++) {
-        if (header[col]) {
-          currentSubject = header[col];
+      for (let col = 4; col < metricRow.length; col++) { // 從E列(索引4)開始
+        // 如果科目行有值，更新當前處理的科目
+        if (subjectRow[col]) {
+          currentSubject = subjectRow[col];
         }
-        const metric = subHeader[col];
+        
+        const metric = metricRow[col];
+        
+        // 使用 "記住" 的科目和當前的指標來建立映射
         if (currentSubject && metric) {
           columnMapping[col] = { subject: currentSubject, metric };
         }
       }
 
+      // 3. 解析學生數據行
       const records: ParsedRecord[] = [];
-      for (const rowData of body) {
-        if (!rowData || rowData.length < 4) continue;
+      const debugLogs: any[] = []; // 用於控制台輸出的數據
+
+      for (let row = 3; row < jsonData.length; row++) {
+        const rowData = jsonData[row];
+        if (!rowData || !rowData[0]) continue; // 如果行不存在或沒有學校名稱，則跳過
         
-        const [schoolName, studentName, className, studentNumber] = rowData;
+        const schoolName = rowData[0];
+        const studentName = rowData[1];
+        const className = rowData[2];
+        const studentNumber = rowData[3];
+        
         if (!schoolName || !studentName || !className || !studentNumber) continue;
 
+        const studentScores: { [key: string]: number | string } = {
+          '學校名': schoolName,
+          '學生': studentName,
+        };
+        let totalScoreFromExcel = 0;
+
         for (const [colIndex, mapping] of Object.entries(columnMapping)) {
-          if (mapping.metric === '成绩' && mapping.subject !== '总分') {
-            const scoreValue = parseFloat(rowData[parseInt(colIndex)]);
-            if (!isNaN(scoreValue)) {
-              records.push({
-                studentNumber: studentNumber.toString(),
-                studentName,
-                className,
-                subjectName: mapping.subject,
-                scoreValue,
-                schoolName
-              });
+          const col = parseInt(colIndex);
+          const scoreValue = parseFloat(rowData[col]);
+
+          if (!isNaN(scoreValue)) {
+            // 如果是 "成绩" 指標，則處理
+            if (mapping.metric === '成绩') {
+              if (mapping.subject !== '总分') {
+                // 這是一門單科成績
+                records.push({
+                  studentNumber: studentNumber.toString(),
+                  studentName,
+                  className,
+                  subjectName: mapping.subject,
+                  scoreValue,
+                  schoolName
+                });
+                studentScores[mapping.subject] = scoreValue;
+              } else {
+                // 這是Excel中的總分
+                totalScoreFromExcel = scoreValue;
+              }
             }
           }
         }
+        studentScores['总分'] = totalScoreFromExcel;
+        debugLogs.push(studentScores);
       }
 
       if (records.length === 0) {
         throw new Error('未找到有效的成績數據');
       }
-      
-      // 保留了調試功能，方便您在控制台校驗解析結果
-      const groupedForDebugging = records.reduce((acc, record) => {
-        const key = `${record.studentName} (${record.studentNumber})`;
-        if (!acc[key]) {
-          acc[key] = { studentName: record.studentName, scores: [] };
-        }
-        acc[key].scores.push({ subject: record.subjectName, score: record.scoreValue });
-        return acc;
-      }, {} as { [key: string]: { studentName: string; scores: { subject: string; score: number }[] } });
-      
+
+      // 4. 在控制台打印日誌 (按照您的要求)
       console.clear(); 
       console.log("=============== Excel 文件解析結果校驗 ===============");
-      console.table(Object.values(groupedForDebugging));
+      console.log(`共解析出 ${records.length} 條單科成績記錄，涉及 ${debugLogs.length} 名學生。`);
+      console.log("👇👇👇 以下是準備傳入後端的數據預覽，請核對：");
+      console.table(debugLogs);
       console.log("======================================================");
 
+      // 5. 保存到數據庫
       await saveToDatabase(records, metadata);
       
       toast({
         title: "上傳成功",
-        description: `成功導入 ${records.length} 條成績記錄`,
+        description: `成功導入 ${debugLogs.length} 名學生的 ${records.length} 條成績記錄`,
       });
 
       return records;
+
     } catch (error) {
       console.error('Excel解析或保存錯誤:', error);
       toast({
@@ -145,9 +163,8 @@ export const useExcelParser = () => {
       const subjectMap = new Map<string, number>(subjectsResult.data.map(s => [s.name, s.id]));
 
       // 3. 準備並批量 Upsert 考試 (Assessments)
-      // 升級 #2: 從 insert 改為 upsert，防止重複上傳時因考試記錄已存在而報錯
-      const assessmentUpserts = uniqueSchools.map(({ name }) => ({
-        school_id: schoolMap.get(name)!,
+      const assessmentUpserts = [...schoolMap.values()].map(schoolId => ({
+        school_id: schoolId,
         academic_year: metadata.academicYear,
         grade_level: metadata.gradeLevel,
         month: metadata.month,
@@ -171,7 +188,6 @@ export const useExcelParser = () => {
       if (classesError) throw classesError;
       
       // 5. 準備並批量 Upsert 學生 (Students)
-      // 首先獲取班級 ID 映射
       const { data: classesData, error: classesQueryError } = await supabase.from('classes').select('id, name, school_id').in('school_id', [...schoolMap.values()]);
       if (classesQueryError) throw classesQueryError;
       const classMap = new Map<string, number>(classesData.map(c => [`${c.name}__${c.school_id}`, c.id]));
@@ -185,7 +201,6 @@ export const useExcelParser = () => {
       if (studentsError) throw studentsError;
 
       // 6. 準備最終的成績數據 (Scores)
-      // 獲取學生 ID 映射
       const { data: studentsData, error: studentsQueryError } = await supabase.from('students').select('id, student_number, class_id').in('class_id', [...classMap.values()]);
       if (studentsQueryError) throw studentsQueryError;
       const studentMap = new Map<string, number>(studentsData.map(s => [`${s.student_number}__${s.class_id}`, s.id]));
@@ -206,10 +221,9 @@ export const useExcelParser = () => {
           };
         }
         return null;
-      }).filter(Boolean);
+      }).filter((item): item is NonNullable<typeof item> => item !== null);
 
       // 7. 批量 Upsert 成績
-      // 升級 #3: 從 insert 改為 upsert，可以安全地重複上傳同一個文件，數據會被覆蓋而不是報錯
       if (scoreUpserts.length > 0) {
         const { error: scoresError } = await supabase
           .from('individual_scores')
