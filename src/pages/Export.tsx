@@ -1,9 +1,215 @@
+import { useState, useMemo } from "react";
 import { Download, FileText, PieChart, BarChart3, TrendingUp, Calendar } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import * as XLSX from 'xlsx';
 
 const Export = () => {
+  const [selectedType, setSelectedType] = useState("");
+  const [selectedGrade, setSelectedGrade] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedExamType, setSelectedExamType] = useState("");
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
+  const { toast } = useToast();
+
+  // 年级选项（与上传页面保持一致）
+  const grades = [
+    "初中一年级",
+    "初中二年级", 
+    "初中三年级"
+  ];
+
+  // 月份选项
+  const months = Array.from({ length: 12 }, (_, i) => ({
+    value: (i + 1).toString(),
+    label: `${i + 1}月`
+  }));
+
+  // 考试类型选项
+  const examTypes = ["月考", "期中", "期末", "生地"];
+
+  // 计算当前学年
+  const currentAcademicYear = useMemo(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    
+    if (currentMonth >= 9) {
+      return `${currentYear}-${currentYear + 1}`;
+    } else {
+      return `${currentYear - 1}-${currentYear}`;
+    }
+  }, []);
+
+  // 学年选项（包括当前学年和前几年）
+  const academicYears = useMemo(() => {
+    const current = currentAcademicYear;
+    const currentStartYear = parseInt(current.split('-')[0]);
+    const years = [];
+    
+    for (let i = 0; i < 3; i++) {
+      const startYear = currentStartYear - i;
+      years.push(`${startYear}-${startYear + 1}`);
+    }
+    
+    return years;
+  }, [currentAcademicYear]);
+
+  // 检查班级排名导出参数是否完整
+  const isRankingParamsComplete = selectedGrade && selectedMonth && selectedExamType && selectedAcademicYear;
+
+  const handleClassRankingExport = async () => {
+    if (!isRankingParamsComplete) {
+      toast({
+        title: "参数不完整",
+        description: "请选择所有必需参数",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      // 1. 查找指定的考试
+      const { data: assessments, error: assessmentError } = await supabase
+        .from('assessments')
+        .select('id')
+        .eq('grade_level', selectedGrade)
+        .eq('month', parseInt(selectedMonth))
+        .eq('type', selectedExamType)
+        .eq('academic_year', selectedAcademicYear);
+
+      if (assessmentError) throw assessmentError;
+      
+      if (!assessments || assessments.length === 0) {
+        toast({
+          title: "未找到考试数据",
+          description: "没有找到符合条件的考试记录",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const assessmentId = assessments[0].id;
+
+      // 2. 获取该考试的所有成绩数据
+      const { data: scores, error: scoresError } = await supabase
+        .from('individual_scores')
+        .select(`
+          score_value,
+          students(name, class_id, classes(name, school_id, schools(name))),
+          subjects(name)
+        `)
+        .eq('assessment_id', assessmentId);
+
+      if (scoresError) throw scoresError;
+
+      if (!scores || scores.length === 0) {
+        toast({
+          title: "未找到成绩数据",
+          description: "该考试暂无成绩记录",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // 3. 数据处理：计算各班级各科平均分
+      const classSubjectAvg: { [key: string]: { [subject: string]: { total: number; count: number; schoolName: string } } } = {};
+      
+      scores.forEach((score: any) => {
+        if (!score.students || !score.subjects) return;
+        
+        const className = score.students.classes?.name;
+        const schoolName = score.students.classes?.schools?.name;
+        const subjectName = score.subjects.name;
+        const scoreValue = parseFloat(score.score_value);
+        
+        if (!className || !schoolName || !subjectName || isNaN(scoreValue)) return;
+        
+        const classKey = `${schoolName}-${className}`;
+        
+        if (!classSubjectAvg[classKey]) {
+          classSubjectAvg[classKey] = {};
+        }
+        
+        if (!classSubjectAvg[classKey][subjectName]) {
+          classSubjectAvg[classKey][subjectName] = { total: 0, count: 0, schoolName };
+        }
+        
+        classSubjectAvg[classKey][subjectName].total += scoreValue;
+        classSubjectAvg[classKey][subjectName].count += 1;
+      });
+
+      // 4. 计算平均分并构建导出数据
+      const exportData: any[] = [];
+      const allSubjects = new Set<string>();
+      
+      // 收集所有科目
+      Object.values(classSubjectAvg).forEach(classData => {
+        Object.keys(classData).forEach(subject => allSubjects.add(subject));
+      });
+      
+      const sortedSubjects = Array.from(allSubjects).sort();
+      
+      // 构建每一行数据
+      Object.entries(classSubjectAvg).forEach(([classKey, subjects]) => {
+        const [schoolName, className] = classKey.split('-');
+        const row: any = {
+          '学校': schoolName,
+          '班级': className
+        };
+        
+        sortedSubjects.forEach(subject => {
+          if (subjects[subject]) {
+            const avg = subjects[subject].total / subjects[subject].count;
+            row[subject] = Math.round(avg * 100) / 100; // 保留两位小数
+          } else {
+            row[subject] = '';
+          }
+        });
+        
+        exportData.push(row);
+      });
+
+      // 5. 按学校和班级排序
+      exportData.sort((a, b) => {
+        if (a['学校'] !== b['学校']) {
+          return a['学校'].localeCompare(b['学校']);
+        }
+        return a['班级'].localeCompare(b['班级']);
+      });
+
+      // 6. 生成Excel文件
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "班级各科平均分排名");
+      
+      const fileName = `班级平均分排名_${selectedAcademicYear}_${selectedGrade}_${selectedMonth}月_${selectedExamType}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+
+      toast({
+        title: "导出成功",
+        description: `已生成 ${fileName}`,
+      });
+
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        title: "导出失败", 
+        description: "数据导出过程中出现错误",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const exportOptions = [
     {
       id: "grades",
@@ -72,6 +278,120 @@ const Export = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* 班级各科平均分排名导出卡片 */}
+              <Card 
+                className={`cursor-pointer transition-all duration-200 hover:shadow-lg border-2 ${
+                  selectedType === "class-ranking" ? "border-primary bg-primary/5" : "border-muted hover:border-primary/50"
+                }`}
+                onClick={() => setSelectedType(selectedType === "class-ranking" ? "" : "class-ranking")}
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-gradient-to-br from-primary to-primary/80">
+                        <BarChart3 className="h-5 w-5 text-primary-foreground" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg font-semibold">班级各科平均分排名</CardTitle>
+                        <CardDescription className="text-sm">
+                          导出指定考试中各班级各科平均分排名表格
+                        </CardDescription>
+                      </div>
+                    </div>
+                    <Badge variant="secondary" className="text-xs">
+                      Excel
+                    </Badge>
+                  </div>
+                </CardHeader>
+                
+                {selectedType === "class-ranking" && (
+                  <CardContent className="pt-0 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">年级</Label>
+                        <Select value={selectedGrade} onValueChange={setSelectedGrade}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="选择年级" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {grades.map((grade) => (
+                              <SelectItem key={grade} value={grade}>
+                                {grade}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">月份</Label>
+                        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="选择月份" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {months.map((month) => (
+                              <SelectItem key={month.value} value={month.value}>
+                                {month.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">考试类型</Label>
+                        <Select value={selectedExamType} onValueChange={setSelectedExamType}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="选择考试类型" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {examTypes.map((type) => (
+                              <SelectItem key={type} value={type}>
+                                {type}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">学年</Label>
+                        <Select value={selectedAcademicYear} onValueChange={setSelectedAcademicYear}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="选择学年" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {academicYears.map((year) => (
+                              <SelectItem key={year} value={year}>
+                                {year}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {isRankingParamsComplete && (
+                      <div className="p-3 bg-accent/10 rounded-lg border border-accent/20">
+                        <p className="text-sm text-accent-foreground">
+                          ✓ 参数已完成，可以开始导出
+                        </p>
+                      </div>
+                    )}
+
+                    <Button 
+                      onClick={handleClassRankingExport}
+                      disabled={!isRankingParamsComplete || isExporting}
+                      className="w-full"
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      {isExporting ? "导出中..." : "导出排名表格"}
+                    </Button>
+                  </CardContent>
+                )}
+              </Card>
+
               {exportOptions.map((option) => (
                 <Card key={option.id} className="card-hover cursor-pointer">
                   <CardHeader>
@@ -111,6 +431,7 @@ const Export = () => {
               <CardContent>
                 <div className="space-y-4">
                   {[
+                    { name: "班级平均分排名_2024-2025_初中二年级_3月_期中.xlsx", time: "2024-03-15 16:30", type: "班级排名", status: "已完成" },
                     { name: "高一年级期中成绩报表.xlsx", time: "2024-03-15 16:30", type: "成绩报表", status: "已完成" },
                     { name: "班级统计分析.pdf", time: "2024-03-14 14:20", type: "统计分析", status: "已完成" },
                     { name: "学期趋势分析.pdf", time: "2024-03-13 10:15", type: "趋势分析", status: "已完成" }
@@ -156,9 +477,9 @@ const Export = () => {
                   <label className="text-sm font-medium">年级范围</label>
                   <select className="w-full p-2 border rounded-lg">
                     <option>全部年级</option>
-                    <option>高一年级</option>
-                    <option>高二年级</option>
-                    <option>高三年级</option>
+                    <option>初中一年级</option>
+                    <option>初中二年级</option>
+                    <option>初中三年级</option>
                   </select>
                 </div>
 
@@ -189,16 +510,16 @@ const Export = () => {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4 text-center">
-                  <div className="p-3 bg-primary-soft rounded-lg">
+                  <div className="p-3 bg-primary/10 rounded-lg">
                     <div className="text-2xl font-bold text-primary">156</div>
                     <div className="text-sm text-muted-foreground">本月导出</div>
                   </div>
-                  <div className="p-3 bg-accent-soft rounded-lg">
+                  <div className="p-3 bg-accent/10 rounded-lg">
                     <div className="text-2xl font-bold text-accent">2.1GB</div>
                     <div className="text-sm text-muted-foreground">文件总量</div>
                   </div>
                 </div>
-                <div className="text-center p-3 bg-warning-soft rounded-lg">
+                <div className="text-center p-3 bg-warning/10 rounded-lg">
                   <div className="text-lg font-bold text-warning">98.5%</div>
                   <div className="text-sm text-muted-foreground">导出成功率</div>
                 </div>
