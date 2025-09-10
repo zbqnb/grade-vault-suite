@@ -1,24 +1,11 @@
 import { useState } from 'react';
-// 修正 #1：直接從 CDN 導入 xlsx 模塊以解決路徑解析問題
-import * as XLSX from 'https://cdn.sheetjs.com/xlsx-latest/package/xlsx.mjs';
-// 修正 #2：直接從 CDN 導入 Supabase 客戶端創建函數
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import * as XLSX from 'xlsx';
+import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-
-// --- Supabase 客戶端初始化 ---
-// 由於無法訪問您的項目配置，請在此處填寫您的 Supabase URL 和 Anon Key
-// 您可以在 Supabase 項目的 Settings > API 中找到這些信息
+import { supabase } from '@/integrations/supabase/client'
 const SUPABASE_URL = "YOUR_SUPABASE_URL";
 const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
-
-// 檢查佔位符是否已被替換，如果沒有，則在控制台發出警告
-if (SUPABASE_URL === "YOUR_SUPABASE_URL" || SUPABASE_ANON_KEY === "YOUR_SUPABASE_ANON_KEY") {
-    console.warn("Supabase 尚未配置，請在 useExcelParser.ts 文件中填寫您的 URL 和 Key。");
-}
-
-// 創建 Supabase 客戶端實例
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-// --- 初始化結束 ---
+const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 
 interface ParsedRecord {
@@ -45,62 +32,52 @@ export const useExcelParser = () => {
     setIsLoading(true);
     
     try {
-      // 读取Excel文件
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data, { type: 'array' });
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+      
+      const header = XLSX.utils.sheet_to_json(worksheet, { 
+        header: 1,
+        range: 1 // 只讀取第2行，即科目行
+      })[0] as any[];
 
-      if (jsonData.length < 4) {
-        throw new Error('文件格式不正确，至少需要4行数据');
+      const subHeader = XLSX.utils.sheet_to_json(worksheet, { 
+        header: 1,
+        range: 2 // 只讀取第3行，即指標行
+      })[0] as any[];
+
+      const body = XLSX.utils.sheet_to_json(worksheet, { 
+        header: 1,
+        range: 3 // 從第4行開始讀取為數據體
+      }) as any[][];
+
+      if (body.length < 1) {
+        throw new Error('文件格式不正確，未找到有效的學生數據');
       }
 
-      // 解析第2行（科目名称）和第3行（指标名称）
-      const subjectRow = jsonData[1]; // 第2行
-      const metricRow = jsonData[2];  // 第3行
-      
-      // 建立列映射
       const columnMapping: { [key: number]: { subject: string; metric: string } } = {};
-      let currentSubject = ''; // 用于处理合并单元格的变量
+      let currentSubject = ''; 
 
-      // 从E列(索引4)开始, 循环以指标行的长度为准
-      for (let col = 4; col < metricRow.length; col++) {
-        // 如果当前列在科目行有值，说明这是一个新科目的开始，更新currentSubject
-        if (subjectRow[col]) {
-          currentSubject = subjectRow[col];
+      for (let col = 4; col < subHeader.length; col++) {
+        if (header[col]) {
+          currentSubject = header[col];
         }
-        
-        const metric = metricRow[col];
-        
-        // 只要有“记住”的科目和当前指标名称，就创建映射
+        const metric = subHeader[col];
         if (currentSubject && metric) {
           columnMapping[col] = { subject: currentSubject, metric };
         }
       }
 
-      // 解析数据行（从第4行开始）
       const records: ParsedRecord[] = [];
-      
-      for (let row = 3; row < jsonData.length; row++) { // 从第4行开始（索引3）
-        const rowData = jsonData[row];
-        
+      for (const rowData of body) {
         if (!rowData || rowData.length < 4) continue;
         
-        const schoolName = rowData[0];    // A列
-        const studentName = rowData[1];   // B列
-        const className = rowData[2];     // C列  
-        const studentNumber = rowData[3]; // D列
-        
+        const [schoolName, studentName, className, studentNumber] = rowData;
         if (!schoolName || !studentName || !className || !studentNumber) continue;
 
-        // 处理成绩数据
         for (const [colIndex, mapping] of Object.entries(columnMapping)) {
-          const col = parseInt(colIndex);
-          
-          // 只处理"成绩"列，且科目不是"总分"
           if (mapping.metric === '成绩' && mapping.subject !== '总分') {
-            const scoreValue = parseFloat(rowData[col]);
-            
+            const scoreValue = parseFloat(rowData[parseInt(colIndex)]);
             if (!isNaN(scoreValue)) {
               records.push({
                 studentNumber: studentNumber.toString(),
@@ -116,51 +93,36 @@ export const useExcelParser = () => {
       }
 
       if (records.length === 0) {
-        throw new Error('未找到有效的成绩数据');
+        throw new Error('未找到有效的成績數據');
       }
-
-      // ======================= 用於調試的控制台日誌 =======================
-      const groupedForDebugging: { [key: string]: { studentName: string; scores: { subject: string; score: number }[] } } = {};
       
-      records.forEach(record => {
+      // 保留了調試功能，方便您在控制台校驗解析結果
+      const groupedForDebugging = records.reduce((acc, record) => {
         const key = `${record.studentName} (${record.studentNumber})`;
-        if (!groupedForDebugging[key]) {
-          groupedForDebugging[key] = {
-            studentName: record.studentName,
-            scores: []
-          };
+        if (!acc[key]) {
+          acc[key] = { studentName: record.studentName, scores: [] };
         }
-        groupedForDebugging[key].scores.push({
-          subject: record.subjectName,
-          score: record.scoreValue
-        });
-      });
-
+        acc[key].scores.push({ subject: record.subjectName, score: record.scoreValue });
+        return acc;
+      }, {} as { [key: string]: { studentName: string; scores: { subject: string; score: number }[] } });
+      
       console.clear(); 
       console.log("=============== Excel 文件解析結果校驗 ===============");
-      console.log(`共解析出 ${records.length} 條單科成績記錄。`);
-      console.log("👇👇👇 以下是按學生分組的詳細成績列表，請核對是否與Excel文件一致：");
-      
       console.table(Object.values(groupedForDebugging));
-      
-      console.log("=============== 校驗結束 ===============");
-      // ======================= 調試代碼結束 =======================
+      console.log("======================================================");
 
-
-      // 保存到数据库
       await saveToDatabase(records, metadata);
       
       toast({
-        title: "上传成功",
-        description: `成功导入 ${records.length} 条成绩记录`,
+        title: "上傳成功",
+        description: `成功導入 ${records.length} 條成績記錄`,
       });
 
       return records;
-
     } catch (error) {
       console.error('Excel解析或保存錯誤:', error);
       toast({
-        title: "上传失败",
+        title: "上傳失敗",
         description: error instanceof Error ? error.message : "發生未知錯誤",
         variant: "destructive",
       });
@@ -172,87 +134,71 @@ export const useExcelParser = () => {
 
   const saveToDatabase = async (records: ParsedRecord[], metadata: UploadMetadata) => {
     try {
-      // 去重以減少數據庫操作
-      const uniqueSchoolNames = [...new Set(records.map(r => r.schoolName))];
-      const uniqueClassKeys = [...new Set(records.map(r => `${r.className}__${r.schoolName}`))];
-      const uniqueSubjectNames = [...new Set(records.map(r => r.subjectName))];
-      
-      // 1) 批量 Upsert 學校並獲取 ID 映射
-      const schoolUpserts = uniqueSchoolNames.map(name => ({ name }));
-      const { data: schools, error: schoolsError } = await supabase
-        .from('schools')
-        .upsert(schoolUpserts, { onConflict: 'name' })
-        .select('id, name');
-      if (schoolsError) throw schoolsError;
-      const schoolMap = new Map<string, number>(schools.map(s => [s.name, s.id]));
+      // 1. 準備基礎數據並去重
+      const uniqueSchools = [...new Set(records.map(r => r.schoolName))].map(name => ({ name }));
+      const uniqueSubjects = [...new Set(records.map(r => r.subjectName))].map(name => ({ name }));
 
-      // 2) 批量 Upsert 考試並獲取 ID 映射
-      const assessmentUpserts = uniqueSchoolNames.map(schoolName => ({
-        school_id: schoolMap.get(schoolName)!,
+      // 2. 批量 Upsert 學校和科目，並獲取 ID 映射
+      const [schoolsResult, subjectsResult] = await Promise.all([
+        supabase.from('schools').upsert(uniqueSchools, { onConflict: 'name' }).select('id, name'),
+        supabase.from('subjects').upsert(uniqueSubjects, { onConflict: 'name' }).select('id, name'),
+      ]);
+      if (schoolsResult.error) throw schoolsResult.error;
+      if (subjectsResult.error) throw subjectsResult.error;
+      const schoolMap = new Map<string, number>(schoolsResult.data.map(s => [s.name, s.id]));
+      const subjectMap = new Map<string, number>(subjectsResult.data.map(s => [s.name, s.id]));
+
+      // 3. 準備並批量 Upsert 考試 (Assessments)
+      // 升級 #2: 從 insert 改為 upsert，防止重複上傳時因考試記錄已存在而報錯
+      const assessmentUpserts = uniqueSchools.map(({ name }) => ({
+        school_id: schoolMap.get(name)!,
         academic_year: metadata.academicYear,
         grade_level: metadata.gradeLevel,
         month: metadata.month,
         type: metadata.assessmentType
       }));
-       const { data: assessments, error: assessmentsError } = await supabase
+      const { data: assessments, error: assessmentsError } = await supabase
         .from('assessments')
         .upsert(assessmentUpserts, { onConflict: 'school_id,academic_year,grade_level,month,type' })
         .select('id, school_id');
       if (assessmentsError) throw assessmentsError;
-      const assessmentMap = new Map<string, number>();
-      assessments.forEach(a => {
-        const schoolName = [...schoolMap.entries()].find(([, id]) => id === a.school_id)?.[0];
-        if(schoolName) assessmentMap.set(schoolName, a.id);
-      });
-      
-      // 3) 批量 Upsert 班級與科目
-      const classUpserts = uniqueClassKeys.map(key => {
-        const [className, schoolName] = key.split('__');
-        return {
-          name: className,
-          school_id: schoolMap.get(schoolName)!,
-          academic_year: metadata.academicYear,
-          grade_level: metadata.gradeLevel
-        };
-      });
-      const { error: classesError } = await supabase.from('classes').upsert(classUpserts, { onConflict: 'school_id,academic_year,grade_level,name' });
+      const assessmentMap = new Map<number, number>(assessments.map(a => [a.school_id, a.id]));
+
+      // 4. 準備並批量 Upsert 班級 (Classes)
+      const uniqueClasses = [...new Set(records.map(r => JSON.stringify({
+        name: r.className,
+        school_id: schoolMap.get(r.schoolName)!,
+        academic_year: metadata.academicYear,
+        grade_level: metadata.gradeLevel,
+      })))].map(s => JSON.parse(s));
+      const { error: classesError } = await supabase.from('classes').upsert(uniqueClasses, { onConflict: 'school_id,academic_year,grade_level,name' });
       if (classesError) throw classesError;
+      
+      // 5. 準備並批量 Upsert 學生 (Students)
+      // 首先獲取班級 ID 映射
+      const { data: classesData, error: classesQueryError } = await supabase.from('classes').select('id, name, school_id').in('school_id', [...schoolMap.values()]);
+      if (classesQueryError) throw classesQueryError;
+      const classMap = new Map<string, number>(classesData.map(c => [`${c.name}__${c.school_id}`, c.id]));
 
-      const subjectUpserts = uniqueSubjectNames.map(name => ({ name }));
-      const { error: subjectsError } = await supabase.from('subjects').upsert(subjectUpserts, { onConflict: 'name' });
-      if (subjectsError) throw subjectsError;
-
-      // 4) 獲取所有需要的班級和科目 ID 映射
-      const [classesQuery, subjectsQuery] = await Promise.all([
-        supabase.from('classes').select('id, name, school_id').eq('academic_year', metadata.academicYear).in('school_id', [...schoolMap.values()]),
-        supabase.from('subjects').select('id, name').in('name', uniqueSubjectNames)
-      ]);
-      if (classesQuery.error) throw classesQuery.error;
-      if (subjectsQuery.error) throw subjectsQuery.error;
-      const classMap = new Map<string, number>(classesQuery.data.map(c => [`${c.name}__${c.school_id}`, c.id]));
-      const subjectMap = new Map<string, number>(subjectsQuery.data.map(s => [s.name, s.id]));
-
-      // 5) 批量 Upsert 學生
-      const studentUpserts = Array.from(new Set(records.map(r => {
-        const schoolId = schoolMap.get(r.schoolName)!;
-        const classId = classMap.get(`${r.className}__${schoolId}`);
-        return classId ? JSON.stringify({ student_number: r.studentNumber, name: r.studentName, class_id: classId }) : null;
-      }))).filter(Boolean).map(s => JSON.parse(s as string));
-      const { error: studentsError } = await supabase.from('students').upsert(studentUpserts, { onConflict: 'student_number,class_id' });
+      const studentUpserts = [...new Set(records.map(r => JSON.stringify({
+        class_id: classMap.get(`${r.className}__${schoolMap.get(r.schoolName)!}`),
+        student_number: r.studentNumber,
+        name: r.studentName,
+      })))].map(s => JSON.parse(s));
+      const { error: studentsError } = await supabase.from('students').upsert(studentUpserts, { onConflict: 'class_id,student_number' });
       if (studentsError) throw studentsError;
 
-      // 6) 獲取所有需要的學生 ID 映射
-      const classIds = [...classMap.values()];
-      const { data: fetchedStudents, error: studentsFetchError } = await supabase.from('students').select('id, student_number, class_id').in('class_id', classIds);
-      if (studentsFetchError) throw studentsFetchError;
-      const studentMap = new Map<string, number>(fetchedStudents.map(s => [`${s.student_number}_${s.class_id}`, s.id]));
+      // 6. 準備最終的成績數據 (Scores)
+      // 獲取學生 ID 映射
+      const { data: studentsData, error: studentsQueryError } = await supabase.from('students').select('id, student_number, class_id').in('class_id', [...classMap.values()]);
+      if (studentsQueryError) throw studentsQueryError;
+      const studentMap = new Map<string, number>(studentsData.map(s => [`${s.student_number}__${s.class_id}`, s.id]));
 
-      // 7) 準備並分片批量插入最終的成績數據
-      const scoreInserts = records.map(record => {
+      const scoreUpserts = records.map(record => {
         const schoolId = schoolMap.get(record.schoolName)!;
         const classId = classMap.get(`${record.className}__${schoolId}`);
-        const studentId = classId ? studentMap.get(`${record.studentNumber}_${classId}`) : undefined;
-        const assessmentId = assessmentMap.get(record.schoolName);
+        const studentId = studentMap.get(`${record.studentNumber}__${classId!}`);
+        const assessmentId = assessmentMap.get(schoolId);
         const subjectId = subjectMap.get(record.subjectName);
         
         if (studentId && subjectId && assessmentId) {
@@ -266,21 +212,18 @@ export const useExcelParser = () => {
         return null;
       }).filter(Boolean);
 
-      if (scoreInserts.length > 0) {
-        const CHUNK_SIZE = 1000; 
-        for (let i = 0; i < scoreInserts.length; i += CHUNK_SIZE) {
-          const chunk = scoreInserts.slice(i, i + CHUNK_SIZE);
-          // 對成績使用 upsert，以防重複上傳同一個文件
-          const { error: scoresError } = await supabase
-            .from('individual_scores')
-            .upsert(chunk, { onConflict: 'assessment_id,student_id,subject_id' });
-          if (scoresError) throw scoresError;
-        }
+      // 7. 批量 Upsert 成績
+      // 升級 #3: 從 insert 改為 upsert，可以安全地重複上傳同一個文件，數據會被覆蓋而不是報錯
+      if (scoreUpserts.length > 0) {
+        const { error: scoresError } = await supabase
+          .from('individual_scores')
+          .upsert(scoreUpserts, { onConflict: 'assessment_id,student_id,subject_id' });
+        if (scoresError) throw scoresError;
       }
 
     } catch (error) {
-      console.error('数据库保存错误:', error);
-      throw new Error('数据保存失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      console.error('數據庫保存錯誤:', error);
+      throw new Error('數據保存失敗: ' + (error instanceof Error ? error.message : '未知錯誤'));
     }
   };
 
