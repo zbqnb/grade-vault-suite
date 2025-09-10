@@ -1,7 +1,25 @@
 import { useState } from 'react';
-import * as XLSX from 'xlsx';
-import { supabase } from '@/integrations/supabase/client';
+// 修正 #1：直接從 CDN 導入 xlsx 模塊以解決路徑解析問題
+import * as XLSX from 'https://cdn.sheetjs.com/xlsx-latest/package/xlsx.mjs';
+// 修正 #2：直接從 CDN 導入 Supabase 客戶端創建函數
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { useToast } from '@/hooks/use-toast';
+
+// --- Supabase 客戶端初始化 ---
+// 由於無法訪問您的項目配置，請在此處填寫您的 Supabase URL 和 Anon Key
+// 您可以在 Supabase 項目的 Settings > API 中找到這些信息
+const SUPABASE_URL = "YOUR_SUPABASE_URL";
+const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+
+// 檢查佔位符是否已被替換，如果沒有，則在控制台發出警告
+if (SUPABASE_URL === "YOUR_SUPABASE_URL" || SUPABASE_ANON_KEY === "YOUR_SUPABASE_ANON_KEY") {
+    console.warn("Supabase 尚未配置，請在 useExcelParser.ts 文件中填寫您的 URL 和 Key。");
+}
+
+// 創建 Supabase 客戶端實例
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// --- 初始化結束 ---
+
 
 interface ParsedRecord {
   studentNumber: string;
@@ -41,7 +59,6 @@ export const useExcelParser = () => {
       const subjectRow = jsonData[1]; // 第2行
       const metricRow = jsonData[2];  // 第3行
       
-      // --- 修正部分开始 ---
       // 建立列映射
       const columnMapping: { [key: number]: { subject: string; metric: string } } = {};
       let currentSubject = ''; // 用于处理合并单元格的变量
@@ -60,7 +77,6 @@ export const useExcelParser = () => {
           columnMapping[col] = { subject: currentSubject, metric };
         }
       }
-      // --- 修正部分结束 ---
 
       // 解析数据行（从第4行开始）
       const records: ParsedRecord[] = [];
@@ -103,6 +119,34 @@ export const useExcelParser = () => {
         throw new Error('未找到有效的成绩数据');
       }
 
+      // ======================= 用於調試的控制台日誌 =======================
+      const groupedForDebugging: { [key: string]: { studentName: string; scores: { subject: string; score: number }[] } } = {};
+      
+      records.forEach(record => {
+        const key = `${record.studentName} (${record.studentNumber})`;
+        if (!groupedForDebugging[key]) {
+          groupedForDebugging[key] = {
+            studentName: record.studentName,
+            scores: []
+          };
+        }
+        groupedForDebugging[key].scores.push({
+          subject: record.subjectName,
+          score: record.scoreValue
+        });
+      });
+
+      console.clear(); 
+      console.log("=============== Excel 文件解析結果校驗 ===============");
+      console.log(`共解析出 ${records.length} 條單科成績記錄。`);
+      console.log("👇👇👇 以下是按學生分組的詳細成績列表，請核對是否與Excel文件一致：");
+      
+      console.table(Object.values(groupedForDebugging));
+      
+      console.log("=============== 校驗結束 ===============");
+      // ======================= 調試代碼結束 =======================
+
+
       // 保存到数据库
       await saveToDatabase(records, metadata);
       
@@ -114,10 +158,10 @@ export const useExcelParser = () => {
       return records;
 
     } catch (error) {
-      console.error('Excel解析错误:', error);
+      console.error('Excel解析或保存錯誤:', error);
       toast({
         title: "上传失败",
-        description: error instanceof Error ? error.message : "文件解析失败",
+        description: error instanceof Error ? error.message : "發生未知錯誤",
         variant: "destructive",
       });
       throw error;
@@ -128,168 +172,108 @@ export const useExcelParser = () => {
 
   const saveToDatabase = async (records: ParsedRecord[], metadata: UploadMetadata) => {
     try {
-      // 去重集合
+      // 去重以減少數據庫操作
       const uniqueSchoolNames = [...new Set(records.map(r => r.schoolName))];
       const uniqueClassKeys = [...new Set(records.map(r => `${r.className}__${r.schoolName}`))];
       const uniqueSubjectNames = [...new Set(records.map(r => r.subjectName))];
+      
+      // 1) 批量 Upsert 學校並獲取 ID 映射
+      const schoolUpserts = uniqueSchoolNames.map(name => ({ name }));
+      const { data: schools, error: schoolsError } = await supabase
+        .from('schools')
+        .upsert(schoolUpserts, { onConflict: 'name' })
+        .select('id, name');
+      if (schoolsError) throw schoolsError;
+      const schoolMap = new Map<string, number>(schools.map(s => [s.name, s.id]));
 
-      // 1) 批量 upsert 学校并获取映射
-      if (uniqueSchoolNames.length > 0) {
-        const schoolUpserts = uniqueSchoolNames.map(name => ({ name }));
-        const { data: upsertedSchools, error: schoolsUpsertError } = await supabase
-          .from('schools')
-          .upsert(schoolUpserts, { onConflict: 'name' })
-          .select('id, name');
-        if (schoolsUpsertError) throw schoolsUpsertError;
-        var schoolMap = new Map<string, number>((upsertedSchools || []).map(s => [s.name, s.id]));
-        // 若有缺失，补充查询
-        if (schoolMap.size !== uniqueSchoolNames.length) {
-          const { data: fetchedSchools, error: schoolsFetchError } = await supabase
-            .from('schools')
-            .select('id, name')
-            .in('name', uniqueSchoolNames);
-          if (schoolsFetchError) throw schoolsFetchError;
-          schoolMap = new Map<string, number>((fetchedSchools || []).map(s => [s.name, s.id]));
-        }
-      } else {
-        var schoolMap = new Map<string, number>();
-      }
-
-      // 2) 批量插入 assessments（每个学校一条）并建立映射
-      const assessmentInserts = uniqueSchoolNames.map(schoolName => ({
+      // 2) 批量 Upsert 考試並獲取 ID 映射
+      const assessmentUpserts = uniqueSchoolNames.map(schoolName => ({
         school_id: schoolMap.get(schoolName)!,
         academic_year: metadata.academicYear,
         grade_level: metadata.gradeLevel,
         month: metadata.month,
         type: metadata.assessmentType
       }));
-      let assessmentMap = new Map<string, number>();
-      if (assessmentInserts.length > 0) {
-        const { data: insertedAssessments, error: assessmentsInsertError } = await supabase
-          .from('assessments')
-          .insert(assessmentInserts)
-          .select('id, school_id');
-        if (assessmentsInsertError) throw assessmentsInsertError;
-        const schoolIdToName = new Map<number, string>([...schoolMap.entries()].map(([name, id]) => [id, name]));
-        for (const a of insertedAssessments || []) {
-          const schoolName = schoolIdToName.get(a.school_id);
-          if (schoolName) assessmentMap.set(schoolName, a.id);
-        }
-        // 若有未建立映射的，回查（例如重复插入被约束拦截时）
-        if (assessmentMap.size !== uniqueSchoolNames.length) {
-          const { data: fetchedAssessments, error: assessmentsFetchError } = await supabase
-            .from('assessments')
-            .select('id, school_id, academic_year, grade_level, month, type')
-            .eq('academic_year', metadata.academicYear)
-            .eq('grade_level', metadata.gradeLevel)
-            .eq('month', metadata.month)
-            .eq('type', metadata.assessmentType)
-            .in('school_id', uniqueSchoolNames.map(n => schoolMap.get(n)!));
-          if (assessmentsFetchError) throw assessmentsFetchError;
-          for (const a of fetchedAssessments || []) {
-            const schoolName = [...schoolMap.entries()].find(([, id]) => id === a.school_id)?.[0];
-            if (schoolName) assessmentMap.set(schoolName, a.id);
-          }
-        }
-      }
-
-      // 3) 批量 upsert 班级与科目
+       const { data: assessments, error: assessmentsError } = await supabase
+        .from('assessments')
+        .upsert(assessmentUpserts, { onConflict: 'school_id,academic_year,grade_level,month,type' })
+        .select('id, school_id');
+      if (assessmentsError) throw assessmentsError;
+      const assessmentMap = new Map<string, number>();
+      assessments.forEach(a => {
+        const schoolName = [...schoolMap.entries()].find(([, id]) => id === a.school_id)?.[0];
+        if(schoolName) assessmentMap.set(schoolName, a.id);
+      });
+      
+      // 3) 批量 Upsert 班級與科目
       const classUpserts = uniqueClassKeys.map(key => {
         const [className, schoolName] = key.split('__');
-        const schoolId = schoolMap.get(schoolName)!;
         return {
           name: className,
-          school_id: schoolId,
+          school_id: schoolMap.get(schoolName)!,
           academic_year: metadata.academicYear,
           grade_level: metadata.gradeLevel
         };
       });
-      if (classUpserts.length > 0) {
-        const { error: classesUpsertError } = await supabase
-          .from('classes')
-          .upsert(classUpserts, { onConflict: 'name,school_id,academic_year' });
-        if (classesUpsertError) throw classesUpsertError;
-      }
+      const { error: classesError } = await supabase.from('classes').upsert(classUpserts, { onConflict: 'school_id,academic_year,grade_level,name' });
+      if (classesError) throw classesError;
 
       const subjectUpserts = uniqueSubjectNames.map(name => ({ name }));
-      if (subjectUpserts.length > 0) {
-        const { error: subjectsUpsertError } = await supabase
-          .from('subjects')
-          .upsert(subjectUpserts, { onConflict: 'name' });
-        if (subjectsUpsertError) throw subjectsUpsertError;
-      }
+      const { error: subjectsError } = await supabase.from('subjects').upsert(subjectUpserts, { onConflict: 'name' });
+      if (subjectsError) throw subjectsError;
 
-      // 获取班级与科目映射
+      // 4) 獲取所有需要的班級和科目 ID 映射
       const [classesQuery, subjectsQuery] = await Promise.all([
-        supabase
-          .from('classes')
-          .select('id, name, school_id, academic_year')
-          .eq('academic_year', metadata.academicYear)
-          .in('school_id', uniqueSchoolNames.map(n => schoolMap.get(n)!)),
-        supabase
-          .from('subjects')
-          .select('id, name')
-          .in('name', uniqueSubjectNames)
+        supabase.from('classes').select('id, name, school_id').eq('academic_year', metadata.academicYear).in('school_id', [...schoolMap.values()]),
+        supabase.from('subjects').select('id, name').in('name', uniqueSubjectNames)
       ]);
       if (classesQuery.error) throw classesQuery.error;
       if (subjectsQuery.error) throw subjectsQuery.error;
+      const classMap = new Map<string, number>(classesQuery.data.map(c => [`${c.name}__${c.school_id}`, c.id]));
+      const subjectMap = new Map<string, number>(subjectsQuery.data.map(s => [s.name, s.id]));
 
-      const classMap = new Map<string, number>((classesQuery.data || []).map(c => [`${c.name}_${c.school_id}`, c.id]));
-      const subjectMap = new Map<string, number>((subjectsQuery.data || []).map(s => [s.name, s.id]));
-
-      // 4) 批量 upsert 学生（需要先解析到 class_id）
-      const uniqueStudents = new Map<string, { number: string; name: string; classId: number }>();
-      for (const r of records) {
+      // 5) 批量 Upsert 學生
+      const studentUpserts = Array.from(new Set(records.map(r => {
         const schoolId = schoolMap.get(r.schoolName)!;
-        const classId = classMap.get(`${r.className}_${schoolId}`);
-        if (!classId) continue;
-        const key = `${r.studentNumber}__${classId}`;
-        if (!uniqueStudents.has(key)) {
-          uniqueStudents.set(key, { number: r.studentNumber, name: r.studentName, classId });
-        }
-      }
-      const studentUpserts = Array.from(uniqueStudents.values()).map(s => ({
-        student_number: s.number,
-        name: s.name,
-        class_id: s.classId
-      }));
-      if (studentUpserts.length > 0) {
-        const { error: studentsUpsertError } = await supabase
-          .from('students')
-          .upsert(studentUpserts, { onConflict: 'student_number,class_id' });
-        if (studentsUpsertError) throw studentsUpsertError;
-      }
+        const classId = classMap.get(`${r.className}__${schoolId}`);
+        return classId ? JSON.stringify({ student_number: r.studentNumber, name: r.studentName, class_id: classId }) : null;
+      }))).filter(Boolean).map(s => JSON.parse(s as string));
+      const { error: studentsError } = await supabase.from('students').upsert(studentUpserts, { onConflict: 'student_number,class_id' });
+      if (studentsError) throw studentsError;
 
-      // 获取学生映射
-      const { data: fetchedStudents, error: studentsFetchError } = await supabase
-        .from('students')
-        .select('id, student_number, class_id')
-        .in('class_id', Array.from(new Set(Array.from(uniqueStudents.values()).map(s => s.classId))));
+      // 6) 獲取所有需要的學生 ID 映射
+      const classIds = [...classMap.values()];
+      const { data: fetchedStudents, error: studentsFetchError } = await supabase.from('students').select('id, student_number, class_id').in('class_id', classIds);
       if (studentsFetchError) throw studentsFetchError;
-      const studentMap = new Map<string, number>((fetchedStudents || []).map(s => [`${s.student_number}_${s.class_id}`, s.id]));
+      const studentMap = new Map<string, number>(fetchedStudents.map(s => [`${s.student_number}_${s.class_id}`, s.id]));
 
-      // 5) 生成成绩插入列表，并分片批量插入
+      // 7) 準備並分片批量插入最終的成績數據
       const scoreInserts = records.map(record => {
         const schoolId = schoolMap.get(record.schoolName)!;
-        const classId = classMap.get(`${record.className}_${schoolId}`);
-        const subjectId = subjectMap.get(record.subjectName);
+        const classId = classMap.get(`${record.className}__${schoolId}`);
         const studentId = classId ? studentMap.get(`${record.studentNumber}_${classId}`) : undefined;
-        const assessmentId = assessmentMap.get(record.schoolName)!;
-        return subjectId && studentId ? {
-          student_id: studentId,
-          subject_id: subjectId,
-          assessment_id: assessmentId,
-          score_value: record.scoreValue
-        } : null;
-      }).filter(Boolean) as Array<{ student_id: number; subject_id: number; assessment_id: number; score_value: number }>;
+        const assessmentId = assessmentMap.get(record.schoolName);
+        const subjectId = subjectMap.get(record.subjectName);
+        
+        if (studentId && subjectId && assessmentId) {
+          return {
+            student_id: studentId,
+            subject_id: subjectId,
+            assessment_id: assessmentId,
+            score_value: record.scoreValue
+          };
+        }
+        return null;
+      }).filter(Boolean);
 
       if (scoreInserts.length > 0) {
-        const CHUNK_SIZE = 1000; // 分片避免单次请求过大
+        const CHUNK_SIZE = 1000; 
         for (let i = 0; i < scoreInserts.length; i += CHUNK_SIZE) {
           const chunk = scoreInserts.slice(i, i + CHUNK_SIZE);
+          // 對成績使用 upsert，以防重複上傳同一個文件
           const { error: scoresError } = await supabase
             .from('individual_scores')
-            .insert(chunk);
+            .upsert(chunk, { onConflict: 'assessment_id,student_id,subject_id' });
           if (scoresError) throw scoresError;
         }
       }
