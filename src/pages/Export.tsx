@@ -79,7 +79,7 @@ const Export = () => {
     // 1. 查找所有符合条件的考试
     const { data: assessments, error: assessmentError } = await supabase 
       .from('assessments') 
-      .select('id') 
+      .select('id, school_id') 
       .eq('grade_level', selectedGrade) 
       .eq('month', parseInt(selectedMonth)) 
       .eq('type', selectedExamType) 
@@ -99,15 +99,19 @@ const Export = () => {
 
     const assessmentIds = assessments.map(a => a.id); 
     console.log('🔍 找到的考试ID:', assessmentIds);
+    console.log('🔍 找到的考试详情:', assessments);
 
-    // 2. 获取所有相关考试成绩数据
+    // 2. 使用与SQL查询完全一致的逻辑获取成绩数据
+    // 这里我们需要分步查询，因为Supabase的JOIN查询有限制
     const { data: scores, error: scoresError } = await supabase 
       .from('individual_scores') 
       .select(` 
         score_value, 
-        students(id, name, class_id, classes(name, school_id, schools(name))), 
-        subjects(name),
-        assessment_id
+        student_id,
+        subject_id,
+        assessment_id,
+        students!inner(id, name, class_id, classes!inner(name, school_id, schools!inner(name))), 
+        subjects!inner(name)
       `) 
       .in('assessment_id', assessmentIds);
 
@@ -124,21 +128,38 @@ const Export = () => {
     } 
 
     console.log('�� 原始成绩数据总数:', scores.length);
-    console.log('�� 原始成绩数据样本:', scores.slice(0, 3));
+    console.log('�� 原始成绩数据样本:', scores.slice(0, 5));
 
-    // 3. 精确的数据处理：确保每个学生每科只计算一次
+    // 3. 过滤数据，确保与SQL查询条件完全一致
+    const filteredScores = scores.filter((score: any) => {
+      if (!score.students || !score.subjects || !score.students.classes || !score.students.classes.schools) {
+        return false;
+      }
+      
+      const schoolName = score.students.classes.schools.name;
+      const className = score.students.classes.name;
+      const gradeLevel = selectedGrade;
+      const month = parseInt(selectedMonth);
+      const examType = selectedExamType;
+      const academicYear = selectedAcademicYear;
+      
+      // 这里我们只过滤基本条件，因为assessment已经过滤了年级、月份、考试类型、学年
+      return schoolName && className && gradeLevel && month && examType && academicYear;
+    });
+
+    console.log('🔍 过滤后的成绩数据总数:', filteredScores.length);
+
+    // 4. 精确的数据处理：确保每个学生每科只计算一次
     const classSubjectData: { 
       [key: string]: { 
         [subject: string]: { 
-          studentScores: { [studentId: string]: number }; // 改为对象，确保每个学生只记录一次
+          studentScores: { [studentId: string]: number };
           schoolName: string;
         } 
       } 
     } = {}; 
     
-    scores.forEach((score: any) => { 
-      if (!score.students || !score.subjects || !score.students.classes || !score.students.classes.schools) return; 
-      
+    filteredScores.forEach((score: any) => { 
       const studentId = score.students.id;
       const className = score.students.classes.name; 
       const schoolName = score.students.classes.schools.name; 
@@ -165,7 +186,7 @@ const Export = () => {
       classSubjectData[classKey][subjectName].studentScores[studentId] = scoreValue;
     }); 
 
-    // 4. 计算并打印详细的调试信息
+    // 5. 计算并打印详细的调试信息
     console.clear();
     console.log("=============== 班级各科平均分计算详情 ===============");
     console.log(`查询条件: ${selectedAcademicYear} ${selectedGrade} ${selectedMonth}月 ${selectedExamType}`);
@@ -206,7 +227,11 @@ const Export = () => {
     console.log("======================================================");
     console.log(`总计: ${debugResults.length} 条记录`);
     
-    // 5. 构建导出数据 
+    // 6. 特别检查历史科目的数据
+    const historyRecords = debugResults.filter(record => record.科目 === '历史');
+    console.log("🔍 历史科目详细数据:", historyRecords);
+    
+    // 7. 构建导出数据 
     const exportData: any[] = []; 
     const allSubjects = new Set<string>(); 
     
@@ -239,7 +264,7 @@ const Export = () => {
       exportData.push(row); 
     }); 
 
-    // 6. 按学校和班级排序 
+    // 8. 按学校和班级排序 
     exportData.sort((a, b) => { 
       if (a['学校'] !== b['学校']) { 
         return a['学校'].localeCompare(b['学校']); 
@@ -247,7 +272,7 @@ const Export = () => {
       return a['班级'].localeCompare(b['班级'], undefined, { numeric: true }); 
     }); 
 
-    // 7. 生成Excel文件 
+    // 9. 生成Excel文件 
     const worksheet = XLSX.utils.json_to_sheet(exportData); 
     const workbook = XLSX.utils.book_new(); 
     XLSX.utils.book_append_sheet(workbook, worksheet, "班级各科平均分排名"); 
