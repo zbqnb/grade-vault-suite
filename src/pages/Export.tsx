@@ -64,155 +64,178 @@ const Export = () => {
   // 检查导出参数是否完整
   const isRankingParamsComplete = selectedGrade && selectedMonth && selectedExamType && selectedAcademicYear; 
 
-  const handleClassRankingExport = async () => { 
-    if (!isRankingParamsComplete) { 
+  cconst handleClassRankingExport = async () => { 
+  if (!isRankingParamsComplete) { 
+    toast({ 
+      title: "参数不完整", 
+      description: "请选择所有必需参数", 
+      variant: "destructive", 
+    }); 
+    return; 
+  } 
+
+  setIsExporting(true); 
+  try { 
+    // 1. 查找所有符合条件的考试
+    const { data: assessments, error: assessmentError } = await supabase 
+      .from('assessments') 
+      .select('id') 
+      .eq('grade_level', selectedGrade) 
+      .eq('month', parseInt(selectedMonth)) 
+      .eq('type', selectedExamType) 
+      .eq('academic_year', selectedAcademicYear); 
+
+    if (assessmentError) throw assessmentError; 
+    
+    if (!assessments || assessments.length === 0) { 
       toast({ 
-        title: "参数不完整", 
-        description: "请选择所有必需参数", 
+        title: "未找到考试数据", 
+        description: "没有找到符合条件的考试记录", 
         variant: "destructive", 
       }); 
+      setIsExporting(false);
       return; 
     } 
 
-    setIsExporting(true); 
-    try { 
-      // 1. 查找所有符合条件的考试
-      const { data: assessments, error: assessmentError } = await supabase 
-        .from('assessments') 
-        .select('id') 
-        .eq('grade_level', selectedGrade) 
-        .eq('month', parseInt(selectedMonth)) 
-        .eq('type', selectedExamType) 
-        .eq('academic_year', selectedAcademicYear); 
+    const assessmentIds = assessments.map(a => a.id); 
 
-      if (assessmentError) throw assessmentError; 
-      
-      if (!assessments || assessments.length === 0) { 
-        toast({ 
-          title: "未找到考试数据", 
-          description: "没有找到符合条件的考试记录", 
-          variant: "destructive", 
-        }); 
-        setIsExporting(false);
-        return; 
-      } 
+    // 2. 使用更精确的查询，获取每个学生每科的最新成绩
+    const { data: scores, error: scoresError } = await supabase 
+      .from('individual_scores') 
+      .select(` 
+        score_value, 
+        students(id, name, class_id, classes(name, school_id, schools(name))), 
+        subjects(name),
+        assessment_id
+      `) 
+      .in('assessment_id', assessmentIds)
+      .order('created_at', { ascending: false }); // 按时间排序，确保获取最新成绩
 
-      // --- 核心修正 #1 ---
-      // 獲取所有符合條件的考試ID，而不僅僅是第一個
-      const assessmentIds = assessments.map(a => a.id); 
+    if (scoresError) throw scoresError; 
 
-      // 2. 使用 .in() 獲取所有相關考試的成績數據
-      const { data: scores, error: scoresError } = await supabase 
-        .from('individual_scores') 
-        .select(` 
-          score_value, 
-          students(name, class_id, classes(name, school_id, schools(name))), 
-          subjects(name) 
-        `) 
-        .in('assessment_id', assessmentIds); // <-- 使用 .in() 進行查詢
-
-      if (scoresError) throw scoresError; 
-
-      if (!scores || scores.length === 0) { 
-        toast({ 
-          title: "未找到成绩数据", 
-          description: "该考试暂无成绩记录", 
-          variant: "destructive", 
-        });
-        setIsExporting(false);
-        return; 
-      } 
-
-      // 3. 数据处理：計算各班級各科平均分 (此部分邏輯是正確的，無需修改)
-      const classSubjectAvg: { [key: string]: { [subject: string]: { total: number; count: number; schoolName: string } } } = {}; 
-      
-      scores.forEach((score: any) => { 
-        if (!score.students || !score.subjects || !score.students.classes || !score.students.classes.schools) return; 
-        
-        const className = score.students.classes.name; 
-        const schoolName = score.students.classes.schools.name; 
-        const subjectName = score.subjects.name; 
-        const scoreValue = parseFloat(score.score_value); 
-        
-        if (!className || !schoolName || !subjectName || isNaN(scoreValue)) return; 
-        
-        const classKey = `${schoolName}-${className}`; 
-        
-        if (!classSubjectAvg[classKey]) { 
-          classSubjectAvg[classKey] = {}; 
-        } 
-        
-        if (!classSubjectAvg[classKey][subjectName]) { 
-          classSubjectAvg[classKey][subjectName] = { total: 0, count: 0, schoolName }; 
-        } 
-        
-        classSubjectAvg[classKey][subjectName].total += scoreValue; 
-        classSubjectAvg[classKey][subjectName].count += 1; 
-      }); 
-
-      // 4. 计算平均分并构建导出数据 
-      const exportData: any[] = []; 
-      const allSubjects = new Set<string>(); 
-      
-      // 收集所有科目 
-      Object.values(classSubjectAvg).forEach(classData => { 
-        Object.keys(classData).forEach(subject => allSubjects.add(subject)); 
-      }); 
-      
-      const sortedSubjects = Array.from(allSubjects).sort(); 
-      
-      // 构建每一行数据 
-      Object.entries(classSubjectAvg).forEach(([classKey, subjects]) => { 
-        const [schoolName, className] = classKey.split('-'); 
-        const row: any = { 
-          '学校': schoolName, 
-          '班级': className 
-        }; 
-        
-        sortedSubjects.forEach(subject => { 
-          if (subjects[subject]) { 
-            const avg = subjects[subject].total / subjects[subject].count; 
-            row[subject] = Math.round(avg * 100) / 100; // 保留两位小数 
-          } else { 
-            row[subject] = ''; 
-          } 
-        }); 
-        
-        exportData.push(row); 
-      }); 
-
-      // 5. 按学校和班级排序 
-      exportData.sort((a, b) => { 
-        if (a['学校'] !== b['学校']) { 
-          return a['学校'].localeCompare(b['学校']); 
-        } 
-        return a['班级'].localeCompare(b['班级'], undefined, { numeric: true }); 
-      }); 
-
-      // 6. 生成Excel文件 
-      const worksheet = XLSX.utils.json_to_sheet(exportData); 
-      const workbook = XLSX.utils.book_new(); 
-      XLSX.utils.book_append_sheet(workbook, worksheet, "班级各科平均分排名"); 
-      
-      const fileName = `班级平均分排名_${selectedAcademicYear}_${selectedGrade}_${selectedMonth}月_${selectedExamType}.xlsx`; 
-      XLSX.writeFile(workbook, fileName); 
-
+    if (!scores || scores.length === 0) { 
       toast({ 
-        title: "导出成功", 
-        description: `已生成 ${fileName}`, 
-      }); 
-
-    } catch (error) { 
-      console.error('Export error:', error); 
-      toast({ 
-        title: "导出失败",  
-        description: "数据导出过程中出现错误", 
+        title: "未找到成绩数据", 
+        description: "该考试暂无成绩记录", 
         variant: "destructive", 
-      }); 
-    } finally { 
-      setIsExporting(false); 
+      });
+      setIsExporting(false);
+      return; 
     } 
-  }; 
+
+    // 3. 精确的数据处理：确保每个学生每科只计算一次
+    const classSubjectData: { 
+      [key: string]: { 
+        [subject: string]: { 
+          studentScores: number[]; // 存储每个学生的成绩
+          schoolName: string;
+        } 
+      } 
+    } = {}; 
+    
+    // 用于去重的Map：记录每个学生每科是否已经计算过
+    const processedStudents: { [key: string]: Set<string> } = {};
+    
+    scores.forEach((score: any) => { 
+      if (!score.students || !score.subjects || !score.students.classes || !score.students.classes.schools) return; 
+      
+      const studentId = score.students.id;
+      const className = score.students.classes.name; 
+      const schoolName = score.students.classes.schools.name; 
+      const subjectName = score.subjects.name; 
+      const scoreValue = parseFloat(score.score_value); 
+      
+      if (!className || !schoolName || !subjectName || isNaN(scoreValue)) return; 
+      
+      const classKey = `${schoolName}-${className}`; 
+      const studentSubjectKey = `${studentId}-${subjectName}`;
+      
+      // 初始化数据结构
+      if (!classSubjectData[classKey]) { 
+        classSubjectData[classKey] = {}; 
+        processedStudents[classKey] = new Set();
+      } 
+      
+      if (!classSubjectData[classKey][subjectName]) { 
+        classSubjectData[classKey][subjectName] = { 
+          studentScores: [], 
+          schoolName 
+        }; 
+      } 
+      
+      // 确保每个学生每科只计算一次（取最新成绩）
+      if (!processedStudents[classKey].has(studentSubjectKey)) {
+        classSubjectData[classKey][subjectName].studentScores.push(scoreValue);
+        processedStudents[classKey].add(studentSubjectKey);
+      }
+    }); 
+
+    // 4. 计算精确的平均分并构建导出数据 
+    const exportData: any[] = []; 
+    const allSubjects = new Set<string>(); 
+    
+    // 收集所有科目 
+    Object.values(classSubjectData).forEach(classData => { 
+      Object.keys(classData).forEach(subject => allSubjects.add(subject)); 
+    }); 
+    
+    const sortedSubjects = Array.from(allSubjects).sort(); 
+    
+    // 构建每一行数据 
+    Object.entries(classSubjectData).forEach(([classKey, subjects]) => { 
+      const [schoolName, className] = classKey.split('-'); 
+      const row: any = { 
+        '学校': schoolName, 
+        '班级': className 
+      }; 
+      
+      sortedSubjects.forEach(subject => { 
+        if (subjects[subject] && subjects[subject].studentScores.length > 0) { 
+          // 计算真正的班级平均分：所有学生成绩的总和除以学生人数
+          const studentScores = subjects[subject].studentScores;
+          const totalScore = studentScores.reduce((sum, score) => sum + score, 0);
+          const avg = totalScore / studentScores.length;
+          row[subject] = Math.round(avg * 100) / 100; // 保留两位小数 
+        } else { 
+          row[subject] = ''; 
+        } 
+      }); 
+      
+      exportData.push(row); 
+    }); 
+
+    // 5. 按学校和班级排序 
+    exportData.sort((a, b) => { 
+      if (a['学校'] !== b['学校']) { 
+        return a['学校'].localeCompare(b['学校']); 
+      } 
+      return a['班级'].localeCompare(b['班级'], undefined, { numeric: true }); 
+    }); 
+
+    // 6. 生成Excel文件 
+    const worksheet = XLSX.utils.json_to_sheet(exportData); 
+    const workbook = XLSX.utils.book_new(); 
+    XLSX.utils.book_append_sheet(workbook, worksheet, "班级各科平均分排名"); 
+    
+    const fileName = `班级平均分排名_${selectedAcademicYear}_${selectedGrade}_${selectedMonth}月_${selectedExamType}.xlsx`; 
+    XLSX.writeFile(workbook, fileName); 
+
+    toast({ 
+      title: "导出成功", 
+      description: `已生成 ${fileName}`, 
+    }); 
+
+  } catch (error) { 
+    console.error('Export error:', error); 
+    toast({ 
+      title: "导出失败",  
+      description: "数据导出过程中出现错误", 
+      variant: "destructive", 
+    }); 
+  } finally { 
+    setIsExporting(false); 
+  } 
+};
 
   const exportOptions = [ 
     { 
