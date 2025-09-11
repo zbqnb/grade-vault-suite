@@ -64,7 +64,7 @@ const Export = () => {
   // 检查导出参数是否完整
   const isRankingParamsComplete = selectedGrade && selectedMonth && selectedExamType && selectedAcademicYear; 
 
-  cconst handleClassRankingExport = async () => { 
+  const handleClassRankingExport = async () => { 
   if (!isRankingParamsComplete) { 
     toast({ 
       title: "参数不完整", 
@@ -98,8 +98,9 @@ const Export = () => {
     } 
 
     const assessmentIds = assessments.map(a => a.id); 
+    console.log('🔍 找到的考试ID:', assessmentIds);
 
-    // 2. 使用更精确的查询，获取每个学生每科的最新成绩
+    // 2. 获取所有相关考试成绩数据
     const { data: scores, error: scoresError } = await supabase 
       .from('individual_scores') 
       .select(` 
@@ -108,8 +109,7 @@ const Export = () => {
         subjects(name),
         assessment_id
       `) 
-      .in('assessment_id', assessmentIds)
-      .order('created_at', { ascending: false }); // 按时间排序，确保获取最新成绩
+      .in('assessment_id', assessmentIds);
 
     if (scoresError) throw scoresError; 
 
@@ -123,18 +123,18 @@ const Export = () => {
       return; 
     } 
 
+    console.log('�� 原始成绩数据总数:', scores.length);
+    console.log('�� 原始成绩数据样本:', scores.slice(0, 3));
+
     // 3. 精确的数据处理：确保每个学生每科只计算一次
     const classSubjectData: { 
       [key: string]: { 
         [subject: string]: { 
-          studentScores: number[]; // 存储每个学生的成绩
+          studentScores: { [studentId: string]: number }; // 改为对象，确保每个学生只记录一次
           schoolName: string;
         } 
       } 
     } = {}; 
-    
-    // 用于去重的Map：记录每个学生每科是否已经计算过
-    const processedStudents: { [key: string]: Set<string> } = {};
     
     scores.forEach((score: any) => { 
       if (!score.students || !score.subjects || !score.students.classes || !score.students.classes.schools) return; 
@@ -148,29 +148,65 @@ const Export = () => {
       if (!className || !schoolName || !subjectName || isNaN(scoreValue)) return; 
       
       const classKey = `${schoolName}-${className}`; 
-      const studentSubjectKey = `${studentId}-${subjectName}`;
       
       // 初始化数据结构
       if (!classSubjectData[classKey]) { 
         classSubjectData[classKey] = {}; 
-        processedStudents[classKey] = new Set();
       } 
       
       if (!classSubjectData[classKey][subjectName]) { 
         classSubjectData[classKey][subjectName] = { 
-          studentScores: [], 
+          studentScores: {}, 
           schoolName 
         }; 
       } 
       
-      // 确保每个学生每科只计算一次（取最新成绩）
-      if (!processedStudents[classKey].has(studentSubjectKey)) {
-        classSubjectData[classKey][subjectName].studentScores.push(scoreValue);
-        processedStudents[classKey].add(studentSubjectKey);
-      }
+      // 确保每个学生每科只记录一次（如果同一学生同一科目有多个成绩，取最后一个）
+      classSubjectData[classKey][subjectName].studentScores[studentId] = scoreValue;
     }); 
 
-    // 4. 计算精确的平均分并构建导出数据 
+    // 4. 计算并打印详细的调试信息
+    console.clear();
+    console.log("=============== 班级各科平均分计算详情 ===============");
+    console.log(`查询条件: ${selectedAcademicYear} ${selectedGrade} ${selectedMonth}月 ${selectedExamType}`);
+    console.log("======================================================");
+    
+    const debugResults: any[] = [];
+    
+    Object.entries(classSubjectData).forEach(([classKey, subjects]) => { 
+      const [schoolName, className] = classKey.split('-'); 
+      
+      Object.entries(subjects).forEach(([subjectName, data]) => {
+        const studentScores = Object.values(data.studentScores);
+        const totalScore = studentScores.reduce((sum, score) => sum + score, 0);
+        const studentCount = studentScores.length;
+        const averageScore = studentCount > 0 ? totalScore / studentCount : 0;
+        
+        const debugInfo = {
+          学校名: schoolName,
+          班级: className,
+          科目: subjectName,
+          总分: Math.round(totalScore * 100) / 100,
+          参考学生人数: studentCount,
+          平均分: Math.round(averageScore * 100) / 100
+        };
+        
+        debugResults.push(debugInfo);
+      });
+    });
+    
+    // 按学校、班级、科目排序
+    debugResults.sort((a, b) => {
+      if (a.学校名 !== b.学校名) return a.学校名.localeCompare(b.学校名);
+      if (a.班级 !== b.班级) return a.班级.localeCompare(b.班级, undefined, { numeric: true });
+      return a.科目.localeCompare(b.科目);
+    });
+    
+    console.table(debugResults);
+    console.log("======================================================");
+    console.log(`总计: ${debugResults.length} 条记录`);
+    
+    // 5. 构建导出数据 
     const exportData: any[] = []; 
     const allSubjects = new Set<string>(); 
     
@@ -190,9 +226,8 @@ const Export = () => {
       }; 
       
       sortedSubjects.forEach(subject => { 
-        if (subjects[subject] && subjects[subject].studentScores.length > 0) { 
-          // 计算真正的班级平均分：所有学生成绩的总和除以学生人数
-          const studentScores = subjects[subject].studentScores;
+        if (subjects[subject] && Object.keys(subjects[subject].studentScores).length > 0) { 
+          const studentScores = Object.values(subjects[subject].studentScores);
           const totalScore = studentScores.reduce((sum, score) => sum + score, 0);
           const avg = totalScore / studentScores.length;
           row[subject] = Math.round(avg * 100) / 100; // 保留两位小数 
@@ -204,7 +239,7 @@ const Export = () => {
       exportData.push(row); 
     }); 
 
-    // 5. 按学校和班级排序 
+    // 6. 按学校和班级排序 
     exportData.sort((a, b) => { 
       if (a['学校'] !== b['学校']) { 
         return a['学校'].localeCompare(b['学校']); 
@@ -212,7 +247,7 @@ const Export = () => {
       return a['班级'].localeCompare(b['班级'], undefined, { numeric: true }); 
     }); 
 
-    // 6. 生成Excel文件 
+    // 7. 生成Excel文件 
     const worksheet = XLSX.utils.json_to_sheet(exportData); 
     const workbook = XLSX.utils.book_new(); 
     XLSX.utils.book_append_sheet(workbook, worksheet, "班级各科平均分排名"); 
@@ -222,7 +257,7 @@ const Export = () => {
 
     toast({ 
       title: "导出成功", 
-      description: `已生成 ${fileName}`, 
+      description: `已生成 ${fileName}，请查看控制台了解详细计算过程`, 
     }); 
 
   } catch (error) { 
