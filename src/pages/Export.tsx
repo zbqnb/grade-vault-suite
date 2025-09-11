@@ -1,10 +1,3 @@
-好的，完全明白您的要求了。這次我將嚴格基於您提供的原始程式碼進行修改，**不會更改您的 `import` 方式**，只專注於修正**導出邏輯**中的問題。
-
-您之前遇到的「只導出一個學校」和「平均分不對」的問題，根源在於程式碼只處理了查詢到的第一個考試ID，而忽略了同一場聯考中其他學校的考試ID。
-
-以下是修正了這個核心邏輯問題的完整 `Export.tsx` 程式碼。
-
-```react:數據導出頁面 (邏輯修正版):Export.tsx
 import { useState, useMemo } from "react"; 
 import { Download, FileText, PieChart, BarChart3, TrendingUp, Calendar } from "lucide-react"; 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"; 
@@ -544,4 +537,4 @@ const Export = () => {
 }; 
 
 export default Export;
-```
+
