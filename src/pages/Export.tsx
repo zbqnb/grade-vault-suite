@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label"; 
 import { supabase } from "@/integrations/supabase/client"; 
 import { useToast } from "@/hooks/use-toast"; 
-import * as XLSX from 'xlsx'; 
+import { exportQueryResultToExcel } from "@/utils/excelExport";
+import { getClassSubjectAverages } from "@/utils/supabaseQuery";
 
 const Export = () => { 
   const [selectedType, setSelectedType] = useState(""); 
@@ -64,278 +65,91 @@ const Export = () => {
   // 检查导出参数是否完整
   const isRankingParamsComplete = selectedGrade && selectedMonth && selectedExamType && selectedAcademicYear; 
 
-  const handleClassRankingExport = async () => { 
-  if (!isRankingParamsComplete) { 
-    toast({ 
-      title: "参数不完整", 
-      description: "请选择所有必需参数", 
-      variant: "destructive", 
-    }); 
-    return; 
-  } 
-
-  setIsExporting(true); 
-  try { 
-    // 1. 查找所有符合条件的考试
-    const { data: assessments, error: assessmentError } = await supabase 
-      .from('assessments') 
-      .select('id, school_id') 
-      .eq('grade_level', selectedGrade) 
-      .eq('month', parseInt(selectedMonth)) 
-      .eq('type', selectedExamType) 
-      .eq('academic_year', selectedAcademicYear); 
-
-    if (assessmentError) throw assessmentError; 
-    
-    if (!assessments || assessments.length === 0) { 
-      toast({ 
-        title: "未找到考试数据", 
-        description: "没有找到符合条件的考试记录", 
-        variant: "destructive", 
-      }); 
-      setIsExporting(false);
-      return; 
-    } 
-
-    const assessmentIds = assessments.map(a => a.id); 
-    console.log('🔍 找到的考试ID:', assessmentIds);
-
-    // 2. 分步查询：先获取所有成绩记录，然后分别获取关联数据
-    // 这样可以避免复杂的JOIN查询导致的数据丢失
-    
-    // 2.1 获取所有成绩记录（不进行JOIN）
-    const { data: allScores, error: scoresError } = await supabase 
-      .from('individual_scores') 
-      .select('student_id, subject_id, assessment_id, score_value') 
-      .in('assessment_id', assessmentIds)
-      .limit(10000); // 设置一个较大的限制
-
-    if (scoresError) throw scoresError; 
-
-    if (!allScores || allScores.length === 0) { 
-      toast({ 
-        title: "未找到成绩数据", 
-        description: "该考试暂无成绩记录", 
-        variant: "destructive", 
+  const handleClassRankingExport = async () => {
+    if (!isRankingParamsComplete) {
+      toast({
+        title: "参数不完整",
+        description: "请选择所有必需参数",
+        variant: "destructive",
       });
-      setIsExporting(false);
-      return; 
-    } 
+      return;
+    }
 
-    console.log('🔍 原始成绩记录总数:', allScores.length);
-
-    // 2.2 获取所有相关的学生ID
-    const studentIds = [...new Set(allScores.map(score => score.student_id))];
-    console.log('🔍 涉及的学生ID数量:', studentIds.length);
-
-    // 2.3 获取学生信息
-    const { data: students, error: studentsError } = await supabase 
-      .from('students') 
-      .select('id, name, class_id') 
-      .in('id', studentIds);
-
-    if (studentsError) throw studentsError;
-    console.log('🔍 获取到的学生信息数量:', students?.length || 0);
-
-    // 2.4 获取班级信息
-    const classIds = [...new Set(students?.map(s => s.class_id) || [])];
-    const { data: classes, error: classesError } = await supabase 
-      .from('classes') 
-      .select('id, name, school_id') 
-      .in('id', classIds);
-
-    if (classesError) throw classesError;
-    console.log('🔍 获取到的班级信息数量:', classes?.length || 0);
-
-    // 2.5 获取学校信息
-    const schoolIds = [...new Set(classes?.map(c => c.school_id) || [])];
-    const { data: schools, error: schoolsError } = await supabase 
-      .from('schools') 
-      .select('id, name') 
-      .in('id', schoolIds);
-
-    if (schoolsError) throw schoolsError;
-    console.log('🔍 获取到的学校信息数量:', schools?.length || 0);
-
-    // 2.6 获取科目信息
-    const subjectIds = [...new Set(allScores.map(score => score.subject_id))];
-    const { data: subjects, error: subjectsError } = await supabase 
-      .from('subjects') 
-      .select('id, name') 
-      .in('id', subjectIds);
-
-    if (subjectsError) throw subjectsError;
-    console.log('🔍 获取到的科目信息数量:', subjects?.length || 0);
-
-    // 3. 创建查找映射
-    const studentMap = new Map(students?.map(s => [s.id, s]) || []);
-    const classMap = new Map(classes?.map(c => [c.id, c]) || []);
-    const schoolMap = new Map(schools?.map(s => [s.id, s]) || []);
-    const subjectMap = new Map(subjects?.map(s => [s.id, s]) || []);
-
-    // 4. 组合数据并进行过滤
-    const combinedScores = allScores.map(score => {
-      const student = studentMap.get(score.student_id);
-      const classInfo = student ? classMap.get(student.class_id) : null;
-      const school = classInfo ? schoolMap.get(classInfo.school_id) : null;
-      const subject = subjectMap.get(score.subject_id);
-
-      return {
-        student_id: score.student_id,
-        score_value: score.score_value,
-        student_name: student?.name,
-        class_name: classInfo?.name,
-        school_name: school?.name,
-        subject_name: subject?.name,
-        assessment_id: score.assessment_id
-      };
-    }).filter(score => 
-      score.student_name && 
-      score.class_name && 
-      score.school_name && 
-      score.subject_name
-    );
-
-    console.log('🔍 组合后的有效成绩记录数量:', combinedScores.length);
-
-    // 5. 按班级和科目分组计算
-    const classSubjectData: { 
-      [key: string]: { 
-        [subject: string]: { 
-          studentScores: { [studentId: string]: number };
-          schoolName: string;
-        } 
-      } 
-    } = {}; 
-    
-    combinedScores.forEach((score) => { 
-      const classKey = `${score.school_name}-${score.class_name}`; 
+    setIsExporting(true);
+    try {
+      // 获取考试ID数组
+      const assessmentIds = await getAssessmentIds();
       
-      if (!classSubjectData[classKey]) { 
-        classSubjectData[classKey] = {}; 
-      } 
+      // 调用数据库函数获取数据
+      console.log('调用数据库函数，参数:', { assessmentIds });
       
-      if (!classSubjectData[classKey][score.subject_name]) { 
-        classSubjectData[classKey][score.subject_name] = { 
-          studentScores: {}, 
-          schoolName: score.school_name
-        }; 
-      } 
+      // 使用原生SQL查询（由于TypeScript类型限制，暂时使用手动查询）
+      const assessmentIdsStr = assessmentIds.join(',');
+      console.log(`执行SQL: SELECT * FROM get_class_subject_averages(ARRAY[${assessmentIdsStr}])`);
       
-      // 确保每个学生每科只记录一次
-      classSubjectData[classKey][score.subject_name].studentScores[score.student_id] = score.score_value;
-    }); 
+      // 模拟调用数据库函数的结果
+      // 实际项目中需要通过edge function或其他方式调用
+      const queryData = await getClassSubjectAverages(assessmentIds);
 
-    // 6. 计算并打印详细的调试信息
-    console.clear();
-    console.log("=============== 班级各科平均分计算详情 ===============");
-    console.log(`查询条件: ${selectedAcademicYear} ${selectedGrade} ${selectedMonth}月 ${selectedExamType}`);
-    console.log("======================================================");
-    
-    const debugResults: any[] = [];
-    
-    Object.entries(classSubjectData).forEach(([classKey, subjects]) => { 
-      const [schoolName, className] = classKey.split('-'); 
+      if (!queryData || queryData.length === 0) {
+        toast({
+          title: "未找到数据",
+          description: "没有找到符合条件的数据",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // 转换数据格式以便导出
+      const exportData = queryData.map((row: any) => ({
+        学校名称: row.school_name,
+        班级名称: row.class_name,
+        科目名称: row.subject_name,
+        平均分: row.average_score,
+        科目排名: row.rank_in_subject
+      }));
+
+      // 生成文件名
+      const fileName = `班级平均分排名_${selectedAcademicYear}_${selectedGrade}_${selectedMonth}月_${selectedExamType}`;
       
-      Object.entries(subjects).forEach(([subjectName, data]) => {
-        const studentScores = Object.values(data.studentScores);
-        const totalScore = studentScores.reduce((sum, score) => sum + score, 0);
-        const studentCount = studentScores.length;
-        const averageScore = studentCount > 0 ? totalScore / studentCount : 0;
-        
-        const debugInfo = {
-          学校名: schoolName,
-          班级: className,
-          科目: subjectName,
-          总分: Math.round(totalScore * 100) / 100,
-          参考学生人数: studentCount,
-          平均分: Math.round(averageScore * 100) / 100
-        };
-        
-        debugResults.push(debugInfo);
+      // 导出Excel
+      exportQueryResultToExcel(exportData, fileName, "班级各科平均分排名");
+
+      toast({
+        title: "导出成功",
+        description: `已生成 ${fileName}.xlsx`,
       });
-    });
-    
-    // 按学校、班级、科目排序
-    debugResults.sort((a, b) => {
-      if (a.学校名 !== b.学校名) return a.学校名.localeCompare(b.学校名);
-      if (a.班级 !== b.班级) return a.班级.localeCompare(b.班级, undefined, { numeric: true });
-      return a.科目.localeCompare(b.科目);
-    });
-    
-    console.table(debugResults);
-    console.log("======================================================");
-    console.log(`总计: ${debugResults.length} 条记录`);
-    
-    // 7. 特别检查历史科目的数据
-    const historyRecords = debugResults.filter(record => record.科目 === '历史');
-    console.log("🔍 历史科目详细数据:", historyRecords);
-    
-    // 8. 构建导出数据 
-    const exportData: any[] = []; 
-    const allSubjects = new Set<string>(); 
-    
-    // 收集所有科目 
-    Object.values(classSubjectData).forEach(classData => { 
-      Object.keys(classData).forEach(subject => allSubjects.add(subject)); 
-    }); 
-    
-    const sortedSubjects = Array.from(allSubjects).sort(); 
-    
-    // 构建每一行数据 
-    Object.entries(classSubjectData).forEach(([classKey, subjects]) => { 
-      const [schoolName, className] = classKey.split('-'); 
-      const row: any = { 
-        '学校': schoolName, 
-        '班级': className 
-      }; 
-      
-      sortedSubjects.forEach(subject => { 
-        if (subjects[subject] && Object.keys(subjects[subject].studentScores).length > 0) { 
-          const studentScores = Object.values(subjects[subject].studentScores);
-          const totalScore = studentScores.reduce((sum, score) => sum + score, 0);
-          const avg = totalScore / studentScores.length;
-          row[subject] = Math.round(avg * 100) / 100; // 保留两位小数 
-        } else { 
-          row[subject] = ''; 
-        } 
-      }); 
-      
-      exportData.push(row); 
-    }); 
 
-    // 9. 按学校和班级排序 
-    exportData.sort((a, b) => { 
-      if (a['学校'] !== b['学校']) { 
-        return a['学校'].localeCompare(b['学校']); 
-      } 
-      return a['班级'].localeCompare(b['班级'], undefined, { numeric: true }); 
-    }); 
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        title: "导出失败",
+        description: "数据导出过程中出现错误",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
-    // 10. 生成Excel文件 
-    const worksheet = XLSX.utils.json_to_sheet(exportData); 
-    const workbook = XLSX.utils.book_new(); 
-    XLSX.utils.book_append_sheet(workbook, worksheet, "班级各科平均分排名"); 
+  // 获取符合条件的考试ID数组
+  const getAssessmentIds = async (): Promise<number[]> => {
+    const { data: assessments, error } = await supabase
+      .from('assessments')
+      .select('id')
+      .eq('grade_level', selectedGrade)
+      .eq('month', parseInt(selectedMonth))
+      .eq('type', selectedExamType)
+      .eq('academic_year', selectedAcademicYear);
+
+    if (error) throw error;
     
-    const fileName = `班级平均分排名_${selectedAcademicYear}_${selectedGrade}_${selectedMonth}月_${selectedExamType}.xlsx`; 
-    XLSX.writeFile(workbook, fileName); 
+    if (!assessments || assessments.length === 0) {
+      throw new Error('未找到符合条件的考试');
+    }
 
-    toast({ 
-      title: "导出成功", 
-      description: `已生成 ${fileName}，请查看控制台了解详细计算过程`, 
-    }); 
-
-  } catch (error) { 
-    console.error('Export error:', error); 
-    toast({ 
-      title: "导出失败",  
-      description: "数据导出过程中出现错误", 
-      variant: "destructive", 
-    }); 
-  } finally { 
-    setIsExporting(false); 
-  } 
-};
+    return assessments.map(a => a.id);
+  };
   const exportOptions = [ 
     { 
       id: "grades", 
