@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
-import { Users, School, BookOpen, UserCheck, Search, Save, CheckCircle, XCircle } from "lucide-react";
+import { Users, School, BookOpen, UserCheck, Search } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -13,11 +12,15 @@ interface School {
   name: string;
 }
 
+interface Teacher {
+  id: number;
+  name: string;
+}
+
 interface Class {
   id: number;
   name: string;
   grade_level: string;
-  homeroom_teacher_id?: number;
   homeroom_teacher_name?: string;
 }
 
@@ -43,6 +46,7 @@ const UserMaintenance = () => {
   const [schools, setSchools] = useState<School[]>([]);
   const [classes, setClasses] = useState<ClassData[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [loading, setLoading] = useState(false);
 
   const academicYears = ["2024-2025", "2025-2026", "2026-2027"];
@@ -82,6 +86,29 @@ const UserMaintenance = () => {
     fetchSubjects();
   }, [toast]);
 
+  // Fetch teachers for selected school
+  useEffect(() => {
+    if (selectedSchool) {
+      const fetchTeachers = async () => {
+        const { data, error } = await supabase
+          .from("teachers")
+          .select("id, name")
+          .eq("school_id", parseInt(selectedSchool));
+        
+        if (error) {
+          toast({
+            title: "加载失败",
+            description: "无法加载教师信息",
+            variant: "destructive",
+          });
+        } else {
+          setTeachers(data || []);
+        }
+      };
+      fetchTeachers();
+    }
+  }, [selectedSchool, toast]);
+
   // Fetch classes and their teacher assignments
   useEffect(() => {
     if (selectedAcademicYear && selectedSchool) {
@@ -94,12 +121,7 @@ const UserMaintenance = () => {
     try {
       let query = supabase
         .from("classes")
-        .select(`
-          id,
-          name,
-          grade_level,
-          academic_year
-        `)
+        .select("id, name, grade_level")
         .eq("school_id", parseInt(selectedSchool));
 
       if (selectedGrade) {
@@ -107,19 +129,14 @@ const UserMaintenance = () => {
       }
 
       const { data: classesData, error } = await query;
-
       if (error) throw error;
 
       // Fetch course assignments and homeroom teachers for each class
       const classesWithAssignments = await Promise.all(
         (classesData || []).map(async (cls) => {
-          // Get homeroom teacher info
-          const { data: homeroomTeacher } = await supabase
-            .from("teachers")
-            .select("name")
-            .eq("id", (cls as any).homeroom_teacher_id)
-            .single();
-
+          // Get homeroom teacher name by checking all teachers and their assignments
+          const homeroomTeacher = teachers.find(t => t.id === (cls as any).homeroom_teacher_id);
+          
           // Get course assignments
           const { data: assignments } = await supabase
             .from("course_assignments")
@@ -140,7 +157,6 @@ const UserMaintenance = () => {
 
           return {
             ...cls,
-            homeroom_teacher_id: (cls as any).homeroom_teacher_id,
             homeroom_teacher_name: homeroomTeacher?.name || "",
             course_assignments,
           };
@@ -160,136 +176,110 @@ const UserMaintenance = () => {
   };
 
   const validateAndSaveHomeroom = async (classId: number, teacherName: string) => {
-    if (!teacherName.trim()) {
-      // Clear homeroom teacher
-      const { error } = await supabase.rpc('update_homeroom_teacher', {
-        class_id: classId,
-        teacher_id: null
-      });
-
-      if (error) {
+    try {
+      if (!teacherName.trim()) {
         toast({
-          title: "保存失败",
-          description: "无法清空班主任信息",
+          title: "提示",
+          description: "班主任姓名不能为空",
           variant: "destructive",
         });
-      } else {
-        toast({
-          title: "保存成功",
-          description: "班主任信息已清空",
-        });
-        fetchClasses();
+        return;
       }
-      return;
-    }
 
-    // Check if teacher exists
-    const { data: teacher, error: teacherError } = await supabase
-      .from("teachers")
-      .select("id")
-      .eq("name", teacherName.trim())
-      .eq("school_id", parseInt(selectedSchool))
-      .single();
+      // Check if teacher exists
+      const teacher = teachers.find(t => t.name === teacherName.trim());
 
-    if (teacherError || !teacher) {
-      toast({
-        title: "保存失败",
-        description: "数据库中不存在此教师名称，请联系系统管理员",
-        variant: "destructive",
+      if (!teacher) {
+        toast({
+          title: "保存失败",
+          description: "数据库中不存在此教师名称，请联系系统管理员",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Use the update_homeroom_teacher function
+      const { error } = await supabase.rpc('update_homeroom_teacher', {
+        class_id: classId,
+        teacher_id: teacher.id
       });
-      return;
-    }
 
-    // Update homeroom teacher - using raw SQL update since homeroom_teacher_id isn't in types
-    const { error } = await supabase.rpc('update_homeroom_teacher', {
-      class_id: classId,
-      teacher_id: teacher.id
-    });
+      if (error) throw error;
 
-    if (error) {
-      toast({
-        title: "保存失败",
-        description: "无法保存班主任信息",
-        variant: "destructive",
-      });
-    } else {
       toast({
         title: "保存成功",
         description: `班主任已设置为 ${teacherName}`,
       });
       fetchClasses();
+    } catch (error) {
+      toast({
+        title: "保存失败",
+        description: "无法保存班主任信息",
+        variant: "destructive",
+      });
     }
   };
 
   const validateAndSaveCourseAssignment = async (classId: number, subjectId: number, teacherName: string) => {
-    if (!teacherName.trim()) {
-      // Remove course assignment
-      const { error } = await supabase
-        .from("course_assignments")
-        .delete()
-        .eq("class_id", classId)
-        .eq("subject_id", subjectId)
-        .eq("academic_year", selectedAcademicYear);
+    try {
+      if (!teacherName.trim()) {
+        // Remove course assignment
+        const { error } = await supabase
+          .from("course_assignments")
+          .delete()
+          .eq("class_id", classId)
+          .eq("subject_id", subjectId)
+          .eq("academic_year", selectedAcademicYear);
 
-      if (error) {
-        toast({
-          title: "保存失败",
-          description: "无法删除任课老师信息",
-          variant: "destructive",
-        });
-      } else {
+        if (error) throw error;
+
         const subject = subjects.find(s => s.id === subjectId);
         toast({
           title: "保存成功",
           description: `${subject?.name}任课老师已清空`,
         });
         fetchClasses();
+        return;
       }
-      return;
-    }
 
-    // Check if teacher exists
-    const { data: teacher, error: teacherError } = await supabase
-      .from("teachers")
-      .select("id")
-      .eq("name", teacherName.trim())
-      .eq("school_id", parseInt(selectedSchool))
-      .single();
+      // Check if teacher exists
+      const teacher = teachers.find(t => t.name === teacherName.trim());
 
-    if (teacherError || !teacher) {
-      toast({
-        title: "保存失败",
-        description: "数据库中不存在此教师名称，请联系系统管理员",
-        variant: "destructive",
-      });
-      return;
-    }
+      if (!teacher) {
+        toast({
+          title: "保存失败",
+          description: "数据库中不存在此教师名称，请联系系统管理员",
+          variant: "destructive",
+        });
+        return;
+      }
 
-    // Upsert course assignment
-    const { error } = await supabase
-      .from("course_assignments")
-      .upsert({
-        teacher_id: teacher.id,
-        class_id: classId,
-        subject_id: subjectId,
-        academic_year: selectedAcademicYear,
-      }, {
-        onConflict: "teacher_id,class_id,subject_id,academic_year"
-      });
+      // Upsert course assignment
+      const { error } = await supabase
+        .from("course_assignments")
+        .upsert({
+          teacher_id: teacher.id,
+          class_id: classId,
+          subject_id: subjectId,
+          academic_year: selectedAcademicYear,
+        }, {
+          onConflict: "teacher_id,class_id,subject_id,academic_year"
+        });
 
-    if (error) {
-      toast({
-        title: "保存失败",
-        description: "无法保存任课老师信息",
-        variant: "destructive",
-      });
-    } else {
+      if (error) throw error;
+
       const subject = subjects.find(s => s.id === subjectId);
       toast({
         title: "保存成功",
         description: `${subject?.name}任课老师已设置为 ${teacherName}`,
       });
       fetchClasses();
+    } catch (error) {
+      toast({
+        title: "保存失败",
+        description: "无法保存任课老师信息",
+        variant: "destructive",
+      });
     }
   };
 
@@ -299,31 +289,33 @@ const UserMaintenance = () => {
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 rounded-lg bg-primary-soft">
-              <Users className="h-6 w-6 text-primary" />
+            <div className="p-3 rounded-xl bg-gradient-primary">
+              <Users className="h-7 w-7 text-white" />
             </div>
             <div>
               <h1 className="text-3xl font-bold text-primary">教师数据维护</h1>
-              <p className="text-muted-foreground">管理班主任和任课老师分配</p>
+              <p className="text-muted-foreground text-lg">管理班主任和任课老师分配</p>
             </div>
           </div>
         </div>
 
         {/* Filters */}
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Search className="h-5 w-5" />
+        <Card className="mb-8 shadow-lg border-0 gradient-soft">
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center gap-3 text-xl">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Search className="h-5 w-5 text-primary" />
+              </div>
               筛选条件
             </CardTitle>
-            <CardDescription>选择学年、学校和年级来查看班级信息</CardDescription>
+            <CardDescription className="text-base">选择学年、学校和年级来查看班级信息</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="academic-year">学年 *</Label>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-3">
+                <Label htmlFor="academic-year" className="text-sm font-semibold">学年 *</Label>
                 <Select value={selectedAcademicYear} onValueChange={setSelectedAcademicYear}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-12">
                     <SelectValue placeholder="选择学年" />
                   </SelectTrigger>
                   <SelectContent>
@@ -336,10 +328,10 @@ const UserMaintenance = () => {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="school">学校 *</Label>
+              <div className="space-y-3">
+                <Label htmlFor="school" className="text-sm font-semibold">学校 *</Label>
                 <Select value={selectedSchool} onValueChange={setSelectedSchool}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-12">
                     <SelectValue placeholder="选择学校" />
                   </SelectTrigger>
                   <SelectContent>
@@ -352,10 +344,10 @@ const UserMaintenance = () => {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="grade">年级</Label>
+              <div className="space-y-3">
+                <Label htmlFor="grade" className="text-sm font-semibold">年级</Label>
                 <Select value={selectedGrade} onValueChange={setSelectedGrade}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-12">
                     <SelectValue placeholder="选择年级（可选）" />
                   </SelectTrigger>
                   <SelectContent>
@@ -376,25 +368,30 @@ const UserMaintenance = () => {
         {selectedAcademicYear && selectedSchool && (
           <div className="space-y-6">
             {loading ? (
-              <div className="text-center py-8">
-                <p className="text-muted-foreground">加载中...</p>
+              <div className="text-center py-12">
+                <div className="inline-flex items-center gap-3">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                  <p className="text-muted-foreground text-lg">加载中...</p>
+                </div>
               </div>
             ) : classes.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-muted-foreground">没有找到班级信息</p>
+              <div className="text-center py-12">
+                <School className="h-16 w-16 text-muted-foreground/50 mx-auto mb-4" />
+                <p className="text-muted-foreground text-lg">没有找到班级信息</p>
+                <p className="text-muted-foreground/70 text-sm">请检查筛选条件或联系管理员</p>
               </div>
             ) : (
               classes.map((classData) => (
-                <Card key={classData.id} className="card-hover">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-accent-soft">
-                        <School className="h-5 w-5 text-accent" />
+                <Card key={classData.id} className="card-hover shadow-lg border-0">
+                  <CardHeader className="pb-4">
+                    <CardTitle className="flex items-center gap-4">
+                      <div className="p-3 rounded-xl bg-accent-soft">
+                        <School className="h-6 w-6 text-accent" />
                       </div>
                       <div>
-                        <div className="text-xl">{classData.grade_level} - {classData.name}</div>
+                        <div className="text-2xl font-bold">{classData.grade_level} - {classData.name}</div>
                         <div className="text-sm text-muted-foreground font-normal">
-                          班级 ID: {classData.id}
+                          班级 ID: {classData.id} | 学年: {selectedAcademicYear}
                         </div>
                       </div>
                     </CardTitle>
@@ -403,18 +400,21 @@ const UserMaintenance = () => {
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                       {/* Homeroom Teacher */}
                       <div className="space-y-4">
-                        <div className="flex items-center gap-2">
-                          <UserCheck className="h-5 w-5 text-primary" />
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="p-2 rounded-lg bg-primary/10">
+                            <UserCheck className="h-5 w-5 text-primary" />
+                          </div>
                           <h3 className="text-lg font-semibold">班主任</h3>
                         </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`homeroom-${classData.id}`}>教师姓名</Label>
+                        <div className="space-y-3">
+                          <Label htmlFor={`homeroom-${classData.id}`} className="text-sm font-medium">教师姓名</Label>
                           <Input
                             id={`homeroom-${classData.id}`}
-                            defaultValue={classData.homeroom_teacher_name}
+                            defaultValue={classData.homeroom_teacher_name || ""}
                             placeholder="输入班主任姓名"
+                            className="h-12 transition-smooth focus:ring-2 focus:ring-primary/20"
                             onBlur={(e) => {
-                              if (e.target.value !== classData.homeroom_teacher_name) {
+                              if (e.target.value !== (classData.homeroom_teacher_name || "")) {
                                 validateAndSaveHomeroom(classData.id, e.target.value);
                               }
                             }}
@@ -424,30 +424,33 @@ const UserMaintenance = () => {
                               }
                             }}
                           />
+                          <p className="text-xs text-muted-foreground">输入完成后按回车或点击其他区域保存</p>
                         </div>
                       </div>
 
                       {/* Subject Teachers */}
                       <div className="space-y-4">
-                        <div className="flex items-center gap-2">
-                          <BookOpen className="h-5 w-5 text-accent" />
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="p-2 rounded-lg bg-accent/10">
+                            <BookOpen className="h-5 w-5 text-accent" />
+                          </div>
                           <h3 className="text-lg font-semibold">任课老师</h3>
                         </div>
-                        <div className="space-y-3 max-h-80 overflow-y-auto">
+                        <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
                           {subjects.map((subject) => {
                             const assignment = classData.course_assignments.find(
                               (a) => a.subject_id === subject.id
                             );
                             return (
-                              <div key={subject.id} className="flex items-center gap-3">
-                                <div className="w-16 text-sm font-medium text-muted-foreground">
+                              <div key={subject.id} className="flex items-center gap-4 p-3 rounded-lg bg-muted/30">
+                                <div className="w-20 text-sm font-medium text-muted-foreground shrink-0">
                                   {subject.name}
                                 </div>
                                 <div className="flex-1">
                                   <Input
                                     defaultValue={assignment?.teacher_name || ""}
                                     placeholder="输入教师姓名"
-                                    className="w-full"
+                                    className="h-10 transition-smooth focus:ring-2 focus:ring-accent/20"
                                     onBlur={(e) => {
                                       if (e.target.value !== (assignment?.teacher_name || "")) {
                                         validateAndSaveCourseAssignment(
@@ -468,12 +471,21 @@ const UserMaintenance = () => {
                             );
                           })}
                         </div>
+                        <p className="text-xs text-muted-foreground">输入完成后按回车或点击其他区域保存</p>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
               ))
             )}
+          </div>
+        )}
+
+        {selectedAcademicYear && selectedSchool && classes.length > 0 && (
+          <div className="mt-8 text-center">
+            <p className="text-muted-foreground">
+              共找到 <span className="font-semibold text-primary">{classes.length}</span> 个班级
+            </p>
           </div>
         )}
       </div>

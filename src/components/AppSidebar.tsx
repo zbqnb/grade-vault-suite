@@ -34,6 +34,12 @@ const mainItems = [
     icon: BarChart3,
     description: "按学届统计分析"
   },
+  { 
+    title: "用户维护", 
+    url: "/user-maintenance", 
+    icon: Users,
+    description: "管理教师和班级信息"
+  },
 ]
 
 export function AppSidebar() {

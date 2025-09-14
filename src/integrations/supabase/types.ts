@@ -57,6 +57,7 @@ export type Database = {
           academic_year: string | null
           created_at: string
           grade_level: string
+          homeroom_teacher_id: number | null
           id: number
           name: string
           school_id: number
@@ -65,6 +66,7 @@ export type Database = {
           academic_year?: string | null
           created_at?: string
           grade_level: string
+          homeroom_teacher_id?: number | null
           id?: number
           name: string
           school_id: number
@@ -73,6 +75,7 @@ export type Database = {
           academic_year?: string | null
           created_at?: string
           grade_level?: string
+          homeroom_teacher_id?: number | null
           id?: number
           name?: string
           school_id?: number
@@ -83,6 +86,13 @@ export type Database = {
             columns: ["school_id"]
             isOneToOne: false
             referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_classes_homeroom_teacher"
+            columns: ["homeroom_teacher_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
             referencedColumns: ["id"]
           },
         ]
@@ -293,7 +303,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_class_subject_averages: {
+        Args: { target_assessment_ids: number[] }
+        Returns: {
+          average_score: number
+          class_name: string
+          rank_in_subject: number
+          school_name: string
+          subject_name: string
+        }[]
+      }
+      update_homeroom_teacher: {
+        Args: { class_id: number; teacher_id?: number }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
