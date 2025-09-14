@@ -1,4 +1,4 @@
-import { BarChart3, Upload, Download, Users, TrendingUp, Award } from "lucide-react";
+import { BarChart3, Upload, Download, Users, TrendingUp, Award, UserCog } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
@@ -28,6 +28,14 @@ const Index = () => {
       href: "/analytics", 
       color: "text-purple-600",
       bgColor: "bg-purple-50"
+    },
+    {
+      title: "用户维护",
+      description: "管理教师和班级信息",
+      icon: UserCog,
+      href: "/user-maintenance",
+      color: "text-orange-600", 
+      bgColor: "bg-orange-50"
     }
   ];
 
@@ -48,7 +56,7 @@ const Index = () => {
         {/* Quick Actions */}
         <div className="mb-12">
           <h2 className="text-2xl font-semibold mb-6 text-center">快速操作</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-8 max-w-6xl mx-auto">
             {quickActions.map((action) => (
               <Card key={action.title} className="card-hover cursor-pointer">
                 <CardHeader className="text-center">

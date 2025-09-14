@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import Upload from "./pages/Upload";
 import Export from "./pages/Export";
 import Analytics from "./pages/Analytics";
+import UserMaintenance from "./pages/UserMaintenance";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,7 @@ const App = () => (
             <Route path="/upload" element={<Upload />} />
             <Route path="/export" element={<Export />} />
             <Route path="/analytics" element={<Analytics />} />
+            <Route path="/user-maintenance" element={<UserMaintenance />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
