@@ -124,7 +124,7 @@ const UserMaintenance = () => {
         .select("id, name, grade_level")
         .eq("school_id", parseInt(selectedSchool));
 
-      if (selectedGrade) {
+      if (selectedGrade && selectedGrade !== "all") {
         query = query.eq("grade_level", selectedGrade);
       }
 
@@ -351,7 +351,7 @@ const UserMaintenance = () => {
                     <SelectValue placeholder="选择年级（可选）" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">全部年级</SelectItem>
+                    <SelectItem value="all">全部年级</SelectItem>
                     {gradeOptions.map((grade) => (
                       <SelectItem key={grade} value={grade}>
                         {grade}
