@@ -1,148 +1,168 @@
-import { BarChart3, Upload, Download, Users, TrendingUp, Award, UserCog } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
+import { NavLink } from "react-router-dom"
+import { Upload, Download, BarChart3, Users, Sparkles, TrendingUp, ArrowRight, Zap, Star } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
-const Index = () => {
-  const quickActions = [
-    {
-      title: "成绩上传",
-      description: "批量导入学生成绩数据",
-      icon: Upload,
-      href: "/upload",
-      color: "text-blue-600",
-      bgColor: "bg-blue-50"
-    },
-    {
-      title: "数据导出", 
-      description: "导出各类统计报表",
-      icon: Download,
-      href: "/export",
-      color: "text-green-600",
-      bgColor: "bg-green-50"
-    },
-    {
-      title: "学届分析",
-      description: "按学届统计分析",
-      icon: BarChart3,
-      href: "/analytics", 
-      color: "text-purple-600",
-      bgColor: "bg-purple-50"
-    },
-    {
-      title: "用户维护",
-      description: "管理教师和班级信息",
-      icon: UserCog,
-      href: "/user-maintenance",
-      color: "text-orange-600", 
-      bgColor: "bg-orange-50"
-    }
-  ];
+const features = [
+  {
+    title: "成绩上传",
+    description: "快速上传和导入学生成绩数据，支持Excel批量处理",
+    icon: Upload,
+    href: "/upload",
+    color: "from-accent to-accent-glow",
+    stats: "支持多种格式",
+    badge: "智能处理"
+  },
+  {
+    title: "数据导出", 
+    description: "生成各类统计报表，支持多种格式导出",
+    icon: Download,
+    href: "/export",
+    color: "from-primary to-primary-glow",
+    stats: "一键导出",
+    badge: "实时生成"
+  },
+  {
+    title: "学届分析",
+    description: "深度分析学生成绩趋势，提供数据洞察",
+    icon: TrendingUp,
+    href: "/analytics", 
+    color: "from-secondary to-secondary-glow",
+    stats: "AI分析",
+    badge: "智能洞察"
+  },
+  {
+    title: "用户维护",
+    description: "管理教师信息和班级配置，维护系统数据",
+    icon: Users,
+    href: "/user-maintenance",
+    color: "from-warning to-warning-glow",
+    stats: "便捷管理",
+    badge: "实时同步"
+  }
+]
 
+export default function Index() {
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-6 py-8">
-        {/* Welcome Section */}
-        <div className="text-center mb-12">
-          <div className="mb-6">
-            <BarChart3 className="h-16 w-16 text-primary mx-auto mb-4" />
-            <h1 className="text-4xl font-bold text-primary mb-4">学生成绩管理系统</h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              专业的教务管理平台，帮助教师高效管理学生成绩数据，提供全面的统计分析功能
+    <div className="min-h-full bg-gradient-to-br from-background via-background to-background-secondary">
+      {/* Hero Section */}
+      <section className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-secondary/5 to-accent/5" />
+        <div className="absolute top-20 left-20 w-72 h-72 bg-primary/10 rounded-full blur-3xl animate-float" />
+        <div className="absolute bottom-20 right-20 w-96 h-96 bg-secondary/10 rounded-full blur-3xl animate-float" style={{ animationDelay: '2s' }} />
+        
+        <div className="relative px-8 py-16 lg:py-24">
+          <div className="max-w-4xl mx-auto text-center space-y-8">
+            <div className="flex justify-center mb-6">
+              <div className="glass-card p-4 rounded-2xl animate-pulse-glow">
+                <Sparkles className="h-12 w-12 text-primary animate-pulse" />
+              </div>
+            </div>
+            
+            <h1 className="text-5xl lg:text-7xl font-bold leading-tight">
+              <span className="gradient-text">现代化</span>
+              <br />
+              学生成绩管理系统
+            </h1>
+            
+            <p className="text-xl lg:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
+              基于先进技术构建的教务管理平台，为学校提供高效、智能的成绩管理解决方案
             </p>
+            
+            <div className="flex flex-col sm:flex-row gap-4 justify-center pt-8">
+              <Button size="lg" className="group">
+                <Zap className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+                开始使用
+                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </Button>
+              <Button variant="glass" size="lg" className="group">
+                <Star className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                了解更多
+              </Button>
+            </div>
           </div>
         </div>
+      </section>
 
-        {/* Quick Actions */}
-        <div className="mb-12">
-          <h2 className="text-2xl font-semibold mb-6 text-center">快速操作</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-8 max-w-6xl mx-auto">
-            {quickActions.map((action) => (
-              <Card key={action.title} className="card-hover cursor-pointer">
-                <CardHeader className="text-center">
-                  <div className={`p-4 rounded-full ${action.bgColor} w-fit mx-auto mb-4`}>
-                    <action.icon className={`h-8 w-8 ${action.color}`} />
+      {/* Features Grid */}
+      <section className="px-8 py-16 lg:py-24">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16 space-y-4">
+            <h2 className="text-3xl lg:text-4xl font-bold gradient-text">核心功能</h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              集成化的功能模块，满足教务管理的各种需求
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {features.map((feature, index) => (
+              <NavLink
+                key={feature.title}
+                to={feature.href}
+                className="group block animate-slide-up"
+                style={{ animationDelay: `${index * 0.1}s` }}
+              >
+                <div className="card-interactive h-full p-6 space-y-4 relative overflow-hidden">
+                  {/* Background Gradient */}
+                  <div className={`absolute inset-0 bg-gradient-to-br ${feature.color} opacity-0 group-hover:opacity-10 transition-all duration-500`} />
+                  
+                  {/* Badge */}
+                  <div className="flex justify-between items-start">
+                    <div className={`p-3 rounded-xl bg-gradient-to-br ${feature.color} text-white shadow-glow group-hover:scale-110 transition-transform duration-300`}>
+                      <feature.icon className="h-6 w-6" />
+                    </div>
+                    <span className="text-xs font-semibold px-2 py-1 rounded-full bg-muted/50 text-muted-foreground">
+                      {feature.badge}
+                    </span>
                   </div>
-                  <CardTitle className="text-xl">{action.title}</CardTitle>
-                  <CardDescription className="text-base">
-                    {action.description}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Link to={action.href}>
-                    <Button className="w-full" size="lg">
-                      开始使用
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
+
+                  <div className="space-y-3">
+                    <div>
+                      <h3 className="text-lg font-bold text-foreground group-hover:gradient-text transition-all duration-300">
+                        {feature.title}
+                      </h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        {feature.description}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2">
+                      <span className="text-xs font-medium text-accent">
+                        {feature.stats}
+                      </span>
+                      <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-300" />
+                    </div>
+                  </div>
+                </div>
+              </NavLink>
             ))}
           </div>
         </div>
-
-        {/* System Overview */}
+      </section>
+      {/* Stats Section */}
+      <section className="px-8 py-16 bg-gradient-to-r from-primary/5 via-secondary/5 to-accent/5">
         <div className="max-w-4xl mx-auto">
-          <h2 className="text-2xl font-semibold mb-6 text-center">系统概览</h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <Card className="text-center">
-              <CardContent className="p-6">
-                <Users className="h-8 w-8 text-primary mx-auto mb-3" />
-                <div className="text-2xl font-bold text-primary">1,245</div>
-                <div className="text-sm text-muted-foreground">学生总数</div>
-              </CardContent>
-            </Card>
-            <Card className="text-center">
-              <CardContent className="p-6">
-                <BarChart3 className="h-8 w-8 text-accent mx-auto mb-3" />
-                <div className="text-2xl font-bold text-accent">36</div>
-                <div className="text-sm text-muted-foreground">班级数量</div>
-              </CardContent>
-            </Card>
-            <Card className="text-center">
-              <CardContent className="p-6">
-                <TrendingUp className="h-8 w-8 text-warning mx-auto mb-3" />
-                <div className="text-2xl font-bold text-warning">85.2</div>
-                <div className="text-sm text-muted-foreground">平均成绩</div>
-              </CardContent>
-            </Card>
-            <Card className="text-center">
-              <CardContent className="p-6">
-                <Award className="h-8 w-8 text-green-600 mx-auto mb-3" />
-                <div className="text-2xl font-bold text-green-600">92.5%</div>
-                <div className="text-sm text-muted-foreground">及格率</div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Recent Activity */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-xl">最近活动</CardTitle>
-              <CardDescription>系统最新的操作记录</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {[
-                  { action: "上传成绩", detail: "高一年级期中考试成绩", time: "2分钟前" },
-                  { action: "导出报表", detail: "班级统计分析报表", time: "15分钟前" },
-                  { action: "学届分析", detail: "2024届学业表现分析", time: "1小时前" },
-                  { action: "数据备份", detail: "系统自动备份完成", time: "3小时前" }
-                ].map((item, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div>
-                      <p className="font-medium">{item.action}</p>
-                      <p className="text-sm text-muted-foreground">{item.detail}</p>
-                    </div>
-                    <span className="text-sm text-muted-foreground">{item.time}</span>
-                  </div>
-                ))}
+          <div className="glass-card p-8 lg:p-12 text-center space-y-8">
+            <h3 className="text-2xl lg:text-3xl font-bold gradient-text">
+              现代化教务管理的选择
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <div className="space-y-2">
+                <div className="text-3xl font-bold text-primary">99.9%</div>
+                <div className="text-sm text-muted-foreground">系统稳定性</div>
               </div>
-            </CardContent>
-          </Card>
+              <div className="space-y-2">
+                <div className="text-3xl font-bold text-secondary">500+</div>
+                <div className="text-sm text-muted-foreground">学校信赖</div>
+              </div>
+              <div className="space-y-2">
+                <div className="text-3xl font-bold text-accent">24/7</div>
+                <div className="text-sm text-muted-foreground">技术支持</div>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      </section>
     </div>
-  );
-};
-
-export default Index;
+  )
+}
