@@ -8,78 +8,63 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* Rich Color Palette */
-    --background: 0 0% 98%;
-    --foreground: 0 0% 15%;
+    /* Modern Education Theme */
+    --background: 220 15% 97%;
+    --foreground: 220 15% 12%;
 
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 15%;
+    --card-foreground: 220 15% 12%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 15%;
+    --popover-foreground: 220 15% 12%;
 
-    /* Primary: Deep Blue */
-    --primary: 220 70% 50%;
-    --primary-foreground: 0 0% 98%;
-    --primary-soft: 220 70% 95%;
-    --primary-vivid: 220 80% 45%;
+    /* Primary: Professional Blue */
+    --primary: 210 70% 45%;
+    --primary-foreground: 0 0% 100%;
+    --primary-soft: 210 60% 92%;
 
-    /* Secondary: Soft Purple */
-    --secondary: 270 50% 88%;
-    --secondary-foreground: 270 60% 20%;
-    --secondary-vivid: 270 60% 60%;
+    /* Secondary: Warm Accent */
+    --secondary: 220 15% 95%;
+    --secondary-foreground: 220 15% 12%;
 
-    /* Muted: Neutral */
-    --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 50%;
+    /* Muted: Subtle Backgrounds */
+    --muted: 220 15% 95%;
+    --muted-foreground: 220 10% 45%;
 
-    /* Accent: Emerald Green */
-    --accent: 160 70% 55%;
-    --accent-foreground: 0 0% 98%;
-    --accent-soft: 160 60% 95%;
-    --accent-vivid: 160 80% 45%;
+    /* Accent: Success Green */
+    --accent: 160 60% 50%;
+    --accent-foreground: 0 0% 100%;
+    --accent-soft: 160 50% 92%;
 
-    /* Success: Fresh Green */
-    --success: 140 70% 50%;
-    --success-foreground: 0 0% 98%;
-    --success-soft: 140 60% 95%;
+    /* Warning: Attention Orange */
+    --warning: 35 85% 55%;
+    --warning-foreground: 0 0% 100%;
+    --warning-soft: 35 85% 92%;
 
-    /* Warning: Golden Yellow */
-    --warning: 45 90% 60%;
-    --warning-foreground: 0 0% 10%;
-    --warning-soft: 45 85% 95%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
 
-    /* Info: Sky Blue */
-    --info: 200 90% 60%;
-    --info-foreground: 0 0% 98%;
-    --info-soft: 200 80% 95%;
-
-    /* Error: Coral Red */
-    --destructive: 0 70% 60%;
-    --destructive-foreground: 0 0% 98%;
-    --destructive-soft: 0 60% 95%;
-
-    --border: 0 0% 92%;
-    --input: 0 0% 95%;
-    --ring: 220 70% 50%;
+    --border: 220 15% 88%;
+    --input: 220 15% 95%;
+    --ring: 210 70% 45%;
 
     --radius: 0.5rem;
 
-    /* Artistic gradient colors */
-    --gradient-1: 220 70% 50%;
-    --gradient-2: 270 60% 60%;
-    --gradient-3: 160 70% 55%;
-    --gradient-4: 45 90% 60%;
+    --sidebar-background: 0 0% 98%;
 
-    /* Sidebar: Glass effect */
-    --sidebar-background: 0 0% 99%;
-    --sidebar-foreground: 0 0% 20%;
-    --sidebar-primary: 220 70% 50%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
     --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 0 0% 96%;
-    --sidebar-accent-foreground: 0 0% 15%;
-    --sidebar-border: 0 0% 94%;
-    --sidebar-ring: 220 70% 50%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
   .dark {
@@ -132,107 +117,34 @@ All colors MUST be HSL.
     line-height: 1.6;
   }
 
-  /* Rich Typography */
-  h1 { @apply text-3xl font-medium tracking-wide; }
-  h2 { @apply text-2xl font-medium tracking-wide; }
-  h3 { @apply text-xl font-normal; }
-  h4 { @apply text-lg font-normal; }
+  /* Typography for mature users */
+  h1 { @apply text-3xl font-bold tracking-tight; }
+  h2 { @apply text-2xl font-semibold; }
+  h3 { @apply text-xl font-semibold; }
+  h4 { @apply text-lg font-medium; }
   p { @apply text-base leading-relaxed; }
 
-  /* Colorful Artistic Elements */
-  .art-line {
-    background: linear-gradient(90deg, 
-      transparent 0%, 
-      hsl(var(--gradient-1)) 25%, 
-      hsl(var(--gradient-2)) 50%, 
-      hsl(var(--gradient-3)) 75%, 
-      transparent 100%
-    );
-  }
-
-  .art-line-vertical {
-    background: linear-gradient(180deg, 
-      transparent 0%, 
-      hsl(var(--gradient-1)) 30%, 
-      hsl(var(--gradient-2)) 70%, 
-      transparent 100%
-    );
-  }
-
-  .art-gradient-bg {
-    background: linear-gradient(135deg, 
-      hsl(var(--primary-soft)) 0%, 
-      hsl(var(--secondary)) 50%, 
-      hsl(var(--accent-soft)) 100%
-    );
-  }
-
-  /* Rich gradients */
-  .gradient-vibrant {
-    background: linear-gradient(135deg, 
-      hsl(var(--gradient-1)) 0%, 
-      hsl(var(--gradient-2)) 50%, 
-      hsl(var(--gradient-3)) 100%
-    );
+  /* Education-focused gradients */
+  .gradient-primary {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
   }
   
-  .gradient-card {
-    background: linear-gradient(145deg, 
-      hsl(var(--card)) 0%, 
-      hsl(var(--primary-soft)) 100%
-    );
+  .gradient-soft {
+    background: linear-gradient(135deg, hsl(var(--primary-soft)), hsl(var(--accent-soft)));
   }
 
-  .gradient-glass {
-    background: linear-gradient(135deg,
-      rgba(255, 255, 255, 0.25) 0%,
-      rgba(255, 255, 255, 0.1) 100%
-    );
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+  /* Smooth transitions for interactions */
+  .transition-smooth {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Enhanced animations */
-  .transition-magical {
-    transition: all 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  /* Card hover effects */
+  .card-hover {
+    @apply transition-smooth hover:shadow-lg hover:scale-[1.02];
   }
 
-  .hover-glow {
-    @apply transition-magical hover:shadow-lg hover:shadow-primary/20 hover:scale-105;
-  }
-
-  .hover-float {
-    @apply transition-magical hover:translate-y-[-8px] hover:shadow-xl hover:shadow-primary/15;
-  }
-
-  /* Colorful focus styles */
-  .focus-colorful {
-    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background;
-  }
-
-  /* Icon glow effects */
-  .icon-glow {
-    filter: drop-shadow(0 0 8px hsl(var(--primary) / 0.3));
-  }
-
-  .icon-pulse {
-    animation: pulse 2s infinite;
-  }
-
-  /* Card variants */
-  .card-primary {
-    @apply bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20;
-  }
-
-  .card-success {
-    @apply bg-gradient-to-br from-success/5 to-success/10 border-success/20;
-  }
-
-  .card-warning {
-    @apply bg-gradient-to-br from-warning/5 to-warning/10 border-warning/20;
-  }
-
-  .card-info {
-    @apply bg-gradient-to-br from-info/5 to-info/10 border-info/20;
+  /* Focus styles for accessibility */
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2;
   }
 }

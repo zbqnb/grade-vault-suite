@@ -46,16 +46,6 @@ export default {
           foreground: "hsl(var(--warning-foreground))",
           soft: "hsl(var(--warning-soft))",
         },
-        success: {
-          DEFAULT: "hsl(var(--success))",
-          foreground: "hsl(var(--success-foreground))",
-          soft: "hsl(var(--success-soft))",
-        },
-        info: {
-          DEFAULT: "hsl(var(--info))",
-          foreground: "hsl(var(--info-foreground))",
-          soft: "hsl(var(--info-soft))",
-        },
         popover: {
           DEFAULT: "hsl(var(--popover))",
           foreground: "hsl(var(--popover-foreground))",
@@ -97,41 +87,10 @@ export default {
             height: "0",
           },
         },
-        "fade-in": {
-          "0%": {
-            opacity: "0",
-            transform: "translateY(10px)"
-          },
-          "100%": {
-            opacity: "1",
-            transform: "translateY(0)"
-          }
-        },
-        "slide-in": {
-          "0%": {
-            transform: "translateX(-10px)",
-            opacity: "0"
-          },
-          "100%": {
-            transform: "translateX(0)",
-            opacity: "1"
-          }
-        },
-        "draw-line": {
-          "0%": {
-            width: "0%"
-          },
-          "100%": {
-            width: "100%"
-          }
-        }
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "fade-in": "fade-in 0.6s ease-out",
-        "slide-in": "slide-in 0.5s ease-out",
-        "draw-line": "draw-line 1s ease-out",
       },
     },
   },
