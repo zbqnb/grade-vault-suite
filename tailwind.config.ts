@@ -23,12 +23,10 @@ export default {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
           soft: "hsl(var(--primary-soft))",
-          glow: "hsl(var(--primary-glow))",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
           foreground: "hsl(var(--secondary-foreground))",
-          glow: "hsl(var(--secondary-glow))",
         },
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
@@ -42,13 +40,11 @@ export default {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
           soft: "hsl(var(--accent-soft))",
-          glow: "hsl(var(--accent-glow))",
         },
         warning: {
           DEFAULT: "hsl(var(--warning))",
           foreground: "hsl(var(--warning-foreground))",
           soft: "hsl(var(--warning-soft))",
-          glow: "hsl(var(--warning-glow))",
         },
         popover: {
           DEFAULT: "hsl(var(--popover))",
@@ -67,7 +63,6 @@ export default {
           "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
-          glass: "hsl(var(--sidebar-glass))",
         },
       },
       borderRadius: {
@@ -96,19 +91,6 @@ export default {
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "float": "float 6s ease-in-out infinite",
-        "pulse-glow": "pulse-glow 2s ease-in-out infinite",
-        "slide-up": "slide-up 0.5s ease-out",
-        "fade-in": "fade-in 0.3s ease-out",
-        "scale-in": "scale-in 0.2s ease-out",
-      },
-      backdropBlur: {
-        xs: '2px',
-      },
-      boxShadow: {
-        'glow': '0 0 40px hsla(var(--primary-glow), 0.15)',
-        'elegant': '0 20px 40px -12px hsla(var(--primary), 0.25)',
-        'glass': '0 8px 32px hsla(0, 0%, 0%, 0.37)',
       },
     },
   },

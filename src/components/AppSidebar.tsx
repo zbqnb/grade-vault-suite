@@ -1,4 +1,5 @@
-import { Upload, Download, BarChart3, Users, GraduationCap, Sparkles, TrendingUp, Zap } from "lucide-react"
+import { useState } from "react"
+import { Upload, Download, BarChart3, FileText, PieChart, TrendingUp, Users } from "lucide-react"
 import { NavLink, useLocation } from "react-router-dom"
 
 import {
@@ -10,6 +11,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar"
 
@@ -18,33 +20,25 @@ const mainItems = [
     title: "成绩上传", 
     url: "/upload", 
     icon: Upload,
-    description: "上传学生成绩数据",
-    color: "text-accent",
-    gradient: "from-accent to-accent-glow"
+    description: "上传学生成绩数据"
   },
   { 
     title: "数据导出", 
     url: "/export", 
     icon: Download,
-    description: "导出各类统计报表",
-    color: "text-primary",
-    gradient: "from-primary to-primary-glow"
+    description: "导出各类统计报表"
   },
   { 
     title: "学届分析", 
     url: "/analytics", 
-    icon: TrendingUp,
-    description: "按学届统计分析",
-    color: "text-secondary",
-    gradient: "from-secondary to-secondary-glow"
+    icon: BarChart3,
+    description: "按学届统计分析"
   },
   { 
     title: "用户维护", 
     url: "/user-maintenance", 
     icon: Users,
-    description: "管理教师和班级信息",
-    color: "text-warning",
-    gradient: "from-warning to-warning-glow"
+    description: "管理教师和班级信息"
   },
 ]
 
@@ -55,112 +49,75 @@ export function AppSidebar() {
   const isCollapsed = state === "collapsed"
 
   const isActive = (path: string) => currentPath === path || currentPath.startsWith(path + "/")
+  const isExpanded = mainItems.some((i) => isActive(i.url))
+
+  const getNavCls = ({ isActive }: { isActive: boolean }) =>
+    isActive 
+      ? "bg-primary text-primary-foreground font-medium shadow-sm" 
+      : "hover:bg-muted/70 text-muted-foreground hover:text-foreground"
 
   return (
     <Sidebar
-      className={`${isCollapsed ? "w-16" : "w-80"} transition-all duration-500 ease-in-out glass border-r backdrop-blur-xl`}
+      className={`${isCollapsed ? "w-16" : "w-72"} transition-all duration-300 border-r bg-card`}
       collapsible="icon"
     >
-      <SidebarContent className="p-4 scrollbar-custom">
-        {/* Elegant Header */}
-        <div className="mb-8 p-4">
-          {!isCollapsed ? (
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-2xl gradient-primary animate-pulse-glow shadow-glow">
-                  <GraduationCap className="h-8 w-8 text-primary-foreground" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold gradient-text">教务管理</h2>
-                  <p className="text-sm text-muted-foreground">现代化平台</p>
-                </div>
-              </div>
-              <div className="glass-card p-4 space-y-2">
-                <div className="flex items-center gap-2 text-sm">
-                  <Sparkles className="h-4 w-4 text-accent animate-pulse" />
-                  <span className="font-medium">当前学期</span>
-                </div>
-                <p className="text-sm text-muted-foreground">2024年春季学期</p>
-              </div>
+      <SidebarContent className="p-4">
+        {/* Header */}
+        <div className="mb-6 px-2">
+          {!isCollapsed && (
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold text-primary">学生成绩管理</h2>
+              <p className="text-sm text-muted-foreground">教务管理系统</p>
             </div>
-          ) : (
-            <div className="flex justify-center animate-float">
-              <div className="p-3 rounded-2xl gradient-primary shadow-glow">
-                <GraduationCap className="h-8 w-8 text-primary-foreground" />
-              </div>
+          )}
+          {isCollapsed && (
+            <div className="flex justify-center">
+              <BarChart3 className="h-8 w-8 text-primary" />
             </div>
           )}
         </div>
 
         <SidebarGroup>
-          <SidebarGroupLabel className={`text-sm font-semibold text-muted-foreground mb-4 ${isCollapsed ? "sr-only" : ""}`}>
-            核心功能
+          <SidebarGroupLabel className={`text-sm font-medium ${isCollapsed ? "sr-only" : ""}`}>
+            主要功能
           </SidebarGroupLabel>
 
           <SidebarGroupContent>
-            <SidebarMenu className="space-y-3">
-              {mainItems.map((item, index) => {
-                const active = isActive(item.url)
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild>
-                      <NavLink 
-                        to={item.url} 
-                        className={`nav-item group flex items-center p-4 rounded-xl min-h-[4rem] transition-all duration-300 ${
-                          active 
-                            ? `active bg-gradient-to-r ${item.gradient} text-primary-foreground shadow-glow` 
-                            : 'hover-glow text-foreground/80 hover:text-foreground'
-                        }`}
-                        title={isCollapsed ? item.title : undefined}
-                      >
-                        <div className={`flex-shrink-0 p-2 rounded-lg ${active ? 'bg-white/20' : 'bg-muted/50 group-hover:bg-muted'} transition-all duration-300`}>
-                          <item.icon className={`h-5 w-5 ${active ? 'text-primary-foreground' : item.color} transition-colors duration-300`} />
+            <SidebarMenu className="space-y-2">
+              {mainItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild>
+                    <NavLink 
+                      to={item.url} 
+                      className={({ isActive }) => 
+                        `${getNavCls({ isActive })} flex items-center p-3 rounded-lg transition-smooth min-h-[3rem] group`
+                      }
+                      title={isCollapsed ? item.title : undefined}
+                    >
+                      <item.icon className="h-5 w-5 flex-shrink-0" />
+                      {!isCollapsed && (
+                        <div className="ml-3 flex-1 min-w-0">
+                          <div className="font-medium text-base">{item.title}</div>
+                          <div className="text-xs opacity-75 truncate">{item.description}</div>
                         </div>
-                        
-                        {!isCollapsed && (
-                          <div className="ml-4 flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-base">{item.title}</span>
-                              {active && <Zap className="h-3 w-3 animate-pulse" />}
-                            </div>
-                            <p className={`text-xs truncate mt-1 ${
-                              active ? 'text-primary-foreground/80' : 'text-muted-foreground'
-                            }`}>
-                              {item.description}
-                            </p>
-                          </div>
-                        )}
-                        
-                        {active && !isCollapsed && (
-                          <div className="w-1 h-8 bg-white/30 rounded-full animate-pulse" />
-                        )}
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              })}
+                      )}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Modern Footer */}
+        {/* Footer */}
         {!isCollapsed && (
-          <div className="mt-auto">
-            <div className="glass-card p-4 space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-accent rounded-full animate-pulse" />
-                <span className="text-xs font-medium text-foreground">系统状态正常</span>
+          <div className="mt-auto pt-4 border-t">
+            <div className="px-2 py-3 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2 mb-1">
+                <Users className="h-3 w-3" />
+                <span>当前学期：2024春季</span>
               </div>
-              <div className="text-xs text-muted-foreground space-y-1">
-                <div className="flex justify-between">
-                  <span>版本</span>
-                  <span className="font-mono">v2.0.0</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>构建</span>
-                  <span className="font-mono">2024.03</span>
-                </div>
-              </div>
+              <div>版本 v1.0.0</div>
             </div>
           </div>
         )}
