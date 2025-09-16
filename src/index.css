@@ -8,7 +8,7 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* Minimalist Light Theme */
+    /* Rich Color Palette */
     --background: 0 0% 98%;
     --foreground: 0 0% 15%;
 
@@ -18,52 +18,68 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 15%;
 
-    /* Primary: Soft Gray-Blue */
-    --primary: 215 15% 25%;
+    /* Primary: Deep Blue */
+    --primary: 220 70% 50%;
     --primary-foreground: 0 0% 98%;
-    --primary-soft: 215 25% 96%;
+    --primary-soft: 220 70% 95%;
+    --primary-vivid: 220 80% 45%;
 
-    /* Secondary: Ultra Light */
-    --secondary: 0 0% 97%;
-    --secondary-foreground: 0 0% 20%;
+    /* Secondary: Soft Purple */
+    --secondary: 270 50% 88%;
+    --secondary-foreground: 270 60% 20%;
+    --secondary-vivid: 270 60% 60%;
 
-    /* Muted: Very Subtle */
+    /* Muted: Neutral */
     --muted: 0 0% 96%;
     --muted-foreground: 0 0% 50%;
 
-    /* Accent: Minimal Teal */
-    --accent: 180 15% 85%;
-    --accent-foreground: 0 0% 20%;
-    --accent-soft: 180 20% 95%;
+    /* Accent: Emerald Green */
+    --accent: 160 70% 55%;
+    --accent-foreground: 0 0% 98%;
+    --accent-soft: 160 60% 95%;
+    --accent-vivid: 160 80% 45%;
 
-    /* Warning: Soft Orange */
-    --warning: 25 50% 65%;
-    --warning-foreground: 0 0% 98%;
-    --warning-soft: 25 50% 95%;
+    /* Success: Fresh Green */
+    --success: 140 70% 50%;
+    --success-foreground: 0 0% 98%;
+    --success-soft: 140 60% 95%;
 
-    --destructive: 0 50% 60%;
+    /* Warning: Golden Yellow */
+    --warning: 45 90% 60%;
+    --warning-foreground: 0 0% 10%;
+    --warning-soft: 45 85% 95%;
+
+    /* Info: Sky Blue */
+    --info: 200 90% 60%;
+    --info-foreground: 0 0% 98%;
+    --info-soft: 200 80% 95%;
+
+    /* Error: Coral Red */
+    --destructive: 0 70% 60%;
     --destructive-foreground: 0 0% 98%;
+    --destructive-soft: 0 60% 95%;
 
     --border: 0 0% 92%;
     --input: 0 0% 95%;
-    --ring: 215 15% 25%;
+    --ring: 220 70% 50%;
 
-    --radius: 0.375rem;
+    --radius: 0.5rem;
 
-    /* Artistic line colors */
-    --line-primary: 215 15% 85%;
-    --line-secondary: 180 10% 90%;
-    --line-accent: 25 30% 88%;
+    /* Artistic gradient colors */
+    --gradient-1: 220 70% 50%;
+    --gradient-2: 270 60% 60%;
+    --gradient-3: 160 70% 55%;
+    --gradient-4: 45 90% 60%;
 
-    /* Sidebar: Clean and minimal */
+    /* Sidebar: Glass effect */
     --sidebar-background: 0 0% 99%;
     --sidebar-foreground: 0 0% 20%;
-    --sidebar-primary: 215 15% 25%;
+    --sidebar-primary: 220 70% 50%;
     --sidebar-primary-foreground: 0 0% 98%;
     --sidebar-accent: 0 0% 96%;
     --sidebar-accent-foreground: 0 0% 15%;
     --sidebar-border: 0 0% 94%;
-    --sidebar-ring: 215 15% 25%;
+    --sidebar-ring: 220 70% 50%;
   }
 
   .dark {
@@ -116,20 +132,20 @@ All colors MUST be HSL.
     line-height: 1.6;
   }
 
-  /* Minimalist Typography */
-  h1 { @apply text-3xl font-light tracking-wide; }
-  h2 { @apply text-2xl font-light tracking-wide; }
+  /* Rich Typography */
+  h1 { @apply text-3xl font-medium tracking-wide; }
+  h2 { @apply text-2xl font-medium tracking-wide; }
   h3 { @apply text-xl font-normal; }
   h4 { @apply text-lg font-normal; }
-  p { @apply text-base leading-relaxed font-light; }
+  p { @apply text-base leading-relaxed; }
 
-  /* Artistic Elements */
+  /* Colorful Artistic Elements */
   .art-line {
     background: linear-gradient(90deg, 
       transparent 0%, 
-      hsl(var(--line-primary)) 20%, 
-      hsl(var(--line-secondary)) 50%, 
-      hsl(var(--line-accent)) 80%, 
+      hsl(var(--gradient-1)) 25%, 
+      hsl(var(--gradient-2)) 50%, 
+      hsl(var(--gradient-3)) 75%, 
       transparent 100%
     );
   }
@@ -137,48 +153,86 @@ All colors MUST be HSL.
   .art-line-vertical {
     background: linear-gradient(180deg, 
       transparent 0%, 
-      hsl(var(--line-primary)) 30%, 
-      hsl(var(--line-secondary)) 70%, 
+      hsl(var(--gradient-1)) 30%, 
+      hsl(var(--gradient-2)) 70%, 
       transparent 100%
     );
   }
 
-  /* Minimalist gradients */
-  .gradient-subtle {
+  .art-gradient-bg {
     background: linear-gradient(135deg, 
-      hsl(var(--background)) 0%, 
+      hsl(var(--primary-soft)) 0%, 
+      hsl(var(--secondary)) 50%, 
       hsl(var(--accent-soft)) 100%
+    );
+  }
+
+  /* Rich gradients */
+  .gradient-vibrant {
+    background: linear-gradient(135deg, 
+      hsl(var(--gradient-1)) 0%, 
+      hsl(var(--gradient-2)) 50%, 
+      hsl(var(--gradient-3)) 100%
     );
   }
   
   .gradient-card {
     background: linear-gradient(145deg, 
       hsl(var(--card)) 0%, 
-      hsl(var(--muted)) 100%
+      hsl(var(--primary-soft)) 100%
     );
   }
 
-  /* Smooth animations */
-  .transition-gentle {
-    transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  .gradient-glass {
+    background: linear-gradient(135deg,
+      rgba(255, 255, 255, 0.25) 0%,
+      rgba(255, 255, 255, 0.1) 100%
+    );
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
   }
 
-  /* Minimal hover effects */
-  .hover-lift {
-    @apply transition-gentle hover:translate-y-[-2px] hover:shadow-sm;
+  /* Enhanced animations */
+  .transition-magical {
+    transition: all 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
   }
 
-  /* Clean focus styles */
-  .focus-minimal {
-    @apply focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1;
+  .hover-glow {
+    @apply transition-magical hover:shadow-lg hover:shadow-primary/20 hover:scale-105;
   }
 
-  /* Artistic borders */
-  .border-art {
-    border-image: linear-gradient(45deg, 
-      hsl(var(--line-primary)), 
-      hsl(var(--line-secondary)), 
-      hsl(var(--line-accent))
-    ) 1;
+  .hover-float {
+    @apply transition-magical hover:translate-y-[-8px] hover:shadow-xl hover:shadow-primary/15;
+  }
+
+  /* Colorful focus styles */
+  .focus-colorful {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
+  /* Icon glow effects */
+  .icon-glow {
+    filter: drop-shadow(0 0 8px hsl(var(--primary) / 0.3));
+  }
+
+  .icon-pulse {
+    animation: pulse 2s infinite;
+  }
+
+  /* Card variants */
+  .card-primary {
+    @apply bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20;
+  }
+
+  .card-success {
+    @apply bg-gradient-to-br from-success/5 to-success/10 border-success/20;
+  }
+
+  .card-warning {
+    @apply bg-gradient-to-br from-warning/5 to-warning/10 border-warning/20;
+  }
+
+  .card-info {
+    @apply bg-gradient-to-br from-info/5 to-info/10 border-info/20;
   }
 }
