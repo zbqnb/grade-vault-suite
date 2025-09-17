@@ -40,53 +40,7 @@ const Index = () => {
   ];
 
   return (
-    <div className="min-h-screen">
-      {/* Hero Section with Gradient Background */}
-      <section className="relative overflow-hidden bg-gradient-hero">
-        <div className="absolute inset-0 opacity-30" style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Ccircle cx='6' cy='6' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
-        }}></div>
-        
-        <div className="relative container mx-auto px-6 py-16">
-          <div className="text-center">
-            <div className="inline-flex items-center gap-2 mb-6 px-4 py-2 bg-white/20 backdrop-blur-sm rounded-full border border-white/30">
-              <Sparkles className="h-4 w-4 text-white animate-pulse-soft" />
-              <span className="text-white/90 text-sm font-medium">现代化教务管理平台</span>
-            </div>
-            
-            <div className="mb-8 animate-fade-up">
-              <GraduationCap className="h-20 w-20 text-white mx-auto mb-6 animate-float" />
-              <h1 className="text-5xl md:text-6xl font-bold text-white mb-6 leading-tight">
-                学生成绩
-                <span className="block bg-gradient-to-r from-yellow-200 to-orange-200 bg-clip-text text-transparent">
-                  管理系统
-                </span>
-              </h1>
-              <p className="text-xl text-white/80 max-w-3xl mx-auto leading-relaxed">
-                专业的教务管理平台，集成现代化设计与强大功能，
-                <br />
-                助力教师高效管理学生数据，提供智能统计分析
-              </p>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center animate-slide-in">
-              <Button size="lg" className="bg-white text-primary hover:bg-white/90 shadow-medium px-8 py-4 text-lg font-semibold">
-                开始体验
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-              <Button variant="outline" size="lg" className="border-white/30 text-white hover:bg-white/10 px-8 py-4 text-lg">
-                了解更多
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* Floating Elements */}
-        <div className="absolute top-20 left-10 w-16 h-16 bg-white/10 rounded-full animate-float" style={{animationDelay: '0s'}}></div>
-        <div className="absolute top-40 right-16 w-8 h-8 bg-white/20 rounded-full animate-float" style={{animationDelay: '2s'}}></div>
-        <div className="absolute bottom-20 left-1/4 w-12 h-12 bg-white/15 rounded-full animate-float" style={{animationDelay: '4s'}}></div>
-      </section>
-
+    <div className="min-h-screen bg-background">
       <div className="container mx-auto px-6 py-16">
         {/* Quick Actions */}
         <section className="mb-16">
