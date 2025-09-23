@@ -263,7 +263,7 @@ const UserMaintenance = () => {
           subject_id: subjectId,
           academic_year: selectedAcademicYear,
         }, {
-          onConflict: "teacher_id,class_id,subject_id,academic_year"
+          onConflict: "class_id,subject_id,academic_year"
         });
 
       if (error) throw error;
