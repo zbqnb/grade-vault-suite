@@ -189,6 +189,8 @@ const UserMaintenance = () => {
       );
 
       setClasses(classesWithAssignments);
+      // 默认折叠所有班级
+      setCollapsedClasses(new Set(classesWithAssignments.map(cls => cls.id)));
     } catch (error) {
       toast({
         title: "加载失败",
