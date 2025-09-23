@@ -121,7 +121,7 @@ const UserMaintenance = () => {
     try {
       let query = supabase
         .from("classes")
-        .select("id, name, grade_level")
+        .select("id, name, grade_level, homeroom_teacher_id")
         .eq("school_id", parseInt(selectedSchool));
 
       if (selectedGrade && selectedGrade !== "all") {
