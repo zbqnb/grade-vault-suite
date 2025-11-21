@@ -2,6 +2,7 @@ import { useState } from "react";
 import { BarChart3, TrendingUp, Users, FileText, Award, Target } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import SubjectRankingAnalysis from "@/components/SubjectRankingAnalysis";
 
 const Analytics = () => {
   const [selectedPage, setSelectedPage] = useState("subject-ranking");
@@ -42,26 +43,7 @@ const Analytics = () => {
   const renderContent = () => {
     switch (selectedPage) {
       case "subject-ranking":
-        return (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-2xl font-bold">各科平均分排名</h2>
-              <p className="text-muted-foreground mt-2">
-                查看各班级在不同科目的平均分排名情况
-              </p>
-            </div>
-            <Card>
-              <CardHeader>
-                <CardTitle>排名数据</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-12 text-muted-foreground">
-                  功能开发中...
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        );
+        return <SubjectRankingAnalysis />;
       case "score-trends":
         return (
           <div className="space-y-6">
