@@ -313,17 +313,6 @@ export type Database = {
           subject_name: string
         }[]
       }
-      get_school_subject_averages: {
-        Args: { target_assessment_ids: number[] }
-        Returns: {
-          average_score: number
-          grade_average: number
-          rank_in_subject: number
-          school_name: string
-          subject_name: string
-          total_schools: number
-        }[]
-      }
       update_homeroom_teacher: {
         Args: { class_id: number; teacher_id?: number }
         Returns: undefined
