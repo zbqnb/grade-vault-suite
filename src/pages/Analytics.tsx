@@ -3,7 +3,7 @@ import { BarChart3, TrendingUp, Users, FileText, Award, Target, Home } from "luc
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import SubjectRankingAnalysis from "@/components/SubjectRankingAnalysis";
+import SchoolRankingAnalysis from "@/components/SchoolRankingAnalysis";
 import { useNavigate } from "react-router-dom";
 
 const Analytics = () => {
@@ -56,7 +56,7 @@ const Analytics = () => {
               <Home className="h-4 w-4 mr-2" />
               返回主页
             </Button>
-            <SubjectRankingAnalysis />
+            <SchoolRankingAnalysis />
           </div>
         );
       case "score-trends":
