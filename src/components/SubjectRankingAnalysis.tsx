@@ -29,9 +29,9 @@ interface Subject {
 
 interface SubjectRanking {
   subjectName: string;
-  classRank: number;
-  gradeAverageRank: number;
-  rankDifference: number;
+  subjectRank: number;              // 该班级该科目在全部班级中的排名
+  classOverallRank: number;         // 班级总分排名（用于对比）
+  rankDifference: number;           // 科目排名 - 总分排名（正数表示拖累，负数表示优势）
   status: 'excellent' | 'medium' | 'poor';
   averageScore: number;
   teacherName?: string;
@@ -190,9 +190,8 @@ const SubjectRankingAnalysis = () => {
           className: string; 
           classId: number;
           homeroomTeacherName?: string;
-          subjects: SubjectRanking[] 
+          subjects: Map<string, { score: number; teacherName?: string }>;
         }>();
-        const subjectRankSums = new Map<string, { sum: number; count: number }>();
         
         filteredData.forEach((item: any) => {
           const classKey = `${item.school_name}_${item.class_name}`;
@@ -206,7 +205,7 @@ const SubjectRankingAnalysis = () => {
               homeroomTeacherName: classInfo?.homeroom_teacher_id 
                 ? homeroomTeacherMap.get(classInfo.homeroom_teacher_id) 
                 : undefined,
-              subjects: []
+              subjects: new Map()
             });
           }
           
@@ -217,78 +216,113 @@ const SubjectRankingAnalysis = () => {
           const teacherKey = `${classData.classId}_${subjectId}`;
           const teacherName = subjectTeacherMap.get(teacherKey);
           
-          // 检查该科目是否已存在，避免重复
-          const existingSubject = classData.subjects.find(s => s.subjectName === item.subject_name);
-          if (!existingSubject) {
-            classData.subjects.push({
-              subjectName: item.subject_name,
-              classRank: item.rank_in_subject,
-              gradeAverageRank: 0, // 将在后面计算
-              rankDifference: 0,
-              status: 'excellent',
-              averageScore: item.average_score,
+          // 添加科目成绩（避免重复）
+          if (!classData.subjects.has(item.subject_name)) {
+            classData.subjects.set(item.subject_name, {
+              score: item.average_score,
               teacherName: teacherName,
             });
           }
-          
-          // 累加每个科目的排名总和
-          if (!subjectRankSums.has(item.subject_name)) {
-            subjectRankSums.set(item.subject_name, { sum: 0, count: 0 });
-          }
-          const sums = subjectRankSums.get(item.subject_name)!;
-          sums.sum += item.rank_in_subject;
-          sums.count += 1;
         });
         
-        // 计算每个科目的年级平均排名
-        const gradeAverageRanks = new Map<string, number>();
-        subjectRankSums.forEach((value, subject) => {
-          gradeAverageRanks.set(subject, Math.round(value.sum / value.count));
-        });
-        
-        // 更新每个班级的科目排名数据
+        // 第一步：计算每个班级的总分平均分，并按总分排名
         const rankings: ClassRankingData[] = [];
         classMap.forEach((classData) => {
-          const subjectRankings = classData.subjects;
-          
-          // 计算班级平均分
-          const classAvg = subjectRankings.reduce((sum, s) => sum + s.averageScore, 0) / subjectRankings.length;
-          
-          // 更新科目数据
-          const updatedSubjects = subjectRankings.map(sr => {
-            const gradeAvgRank = gradeAverageRanks.get(sr.subjectName) || 0;
-            const diff = sr.classRank - gradeAvgRank;
-            let status: 'excellent' | 'medium' | 'poor' = 'excellent';
-            if (diff >= 3) status = 'poor';
-            else if (diff >= 1) status = 'medium';
-            
-            return {
-              ...sr,
-              gradeAverageRank: gradeAvgRank,
-              rankDifference: diff,
-              status,
-            };
-          });
-          
-          const problemCount = updatedSubjects.filter(s => s.status === 'poor').length;
+          const subjectScores = Array.from(classData.subjects.values());
+          const classAvg = subjectScores.reduce((sum, s) => sum + s.score, 0) / subjectScores.length;
           
           rankings.push({
             schoolName: classData.schoolName,
             className: classData.className,
             classId: classData.classId,
             classAverageScore: Math.round(classAvg * 100) / 100,
-            classRank: 0, // 将在排序后计算
+            classRank: 0, // 将在下一步计算
             totalClasses: classMap.size,
-            subjectRankings: updatedSubjects,
-            problemSubjectCount: problemCount,
+            subjectRankings: [],
+            problemSubjectCount: 0,
             homeroomTeacherName: classData.homeroomTeacherName,
           });
         });
         
-        // 按平均分排序并分配班级排名
+        // 按总分平均分排序，分配班级总分排名
         rankings.sort((a, b) => b.classAverageScore - a.classAverageScore);
         rankings.forEach((r, idx) => {
           r.classRank = idx + 1;
+        });
+        
+        // 第二步：为每个科目单独计算排名
+        const subjectRankings = new Map<string, Array<{
+          classKey: string;
+          score: number;
+          classOverallRank: number;
+          teacherName?: string;
+        }>>();
+        
+        // 收集每个科目的所有班级成绩
+        rankings.forEach(classRanking => {
+          const classData = classMap.get(`${classRanking.schoolName}_${classRanking.className}`)!;
+          classData.subjects.forEach((subjectData, subjectName) => {
+            if (!subjectRankings.has(subjectName)) {
+              subjectRankings.set(subjectName, []);
+            }
+            subjectRankings.get(subjectName)!.push({
+              classKey: `${classRanking.schoolName}_${classRanking.className}`,
+              score: subjectData.score,
+              classOverallRank: classRanking.classRank,
+              teacherName: subjectData.teacherName,
+            });
+          });
+        });
+        
+        // 为每个科目按成绩排序并分配排名
+        const subjectRankMap = new Map<string, Map<string, number>>();
+        subjectRankings.forEach((classes, subjectName) => {
+          classes.sort((a, b) => b.score - a.score);
+          const rankMap = new Map<string, number>();
+          classes.forEach((cls, idx) => {
+            rankMap.set(cls.classKey, idx + 1);
+          });
+          subjectRankMap.set(subjectName, rankMap);
+        });
+        
+        // 第三步：为每个班级填充科目排名数据
+        rankings.forEach(classRanking => {
+          const classKey = `${classRanking.schoolName}_${classRanking.className}`;
+          const classData = classMap.get(classKey)!;
+          const subjectRankingsList: SubjectRanking[] = [];
+          
+          classData.subjects.forEach((subjectData, subjectName) => {
+            const subjectRank = subjectRankMap.get(subjectName)?.get(classKey) || 0;
+            const rankDiff = subjectRank - classRanking.classRank;
+            
+            // 根据排名差值判断状态
+            let status: 'excellent' | 'medium' | 'poor' = 'excellent';
+            if (rankDiff >= 3) {
+              status = 'poor';      // 科目排名比总分排名差3名及以上，属于拖累
+            } else if (rankDiff >= 1) {
+              status = 'medium';    // 科目排名比总分排名差1-2名
+            } else if (rankDiff <= -3) {
+              status = 'excellent'; // 科目排名比总分排名好3名及以上，属于优势
+            } else {
+              status = 'medium';    // 差距在±2名以内
+            }
+            
+            subjectRankingsList.push({
+              subjectName,
+              subjectRank,
+              classOverallRank: classRanking.classRank,
+              rankDifference: rankDiff,
+              status,
+              averageScore: subjectData.score,
+              teacherName: subjectData.teacherName,
+            });
+          });
+          
+          // 计算问题科目数量（拖累科目）
+          const problemCount = subjectRankingsList.filter(s => s.status === 'poor').length;
+          
+          classRanking.subjectRankings = subjectRankingsList;
+          classRanking.problemSubjectCount = problemCount;
         });
         
         setClassRankings(rankings);
@@ -556,8 +590,8 @@ const SubjectRankingAnalysis = () => {
                       <div className="grid grid-cols-6 gap-2 text-xs font-medium text-muted-foreground pb-2 border-b">
                         <div>科目</div>
                         <div className="text-center">任课教师</div>
-                        <div className="text-center">班排</div>
-                        <div className="text-center">均排</div>
+                        <div className="text-center">科目排名</div>
+                        <div className="text-center">总分排名</div>
                         <div className="text-center">差值</div>
                         <div className="text-center">状态</div>
                       </div>
@@ -568,14 +602,17 @@ const SubjectRankingAnalysis = () => {
                         >
                           <div className="font-medium">{subject.subjectName}</div>
                           <div className="text-center text-xs">{subject.teacherName || '-'}</div>
-                          <div className="text-center">{subject.classRank}</div>
-                          <div className="text-center text-muted-foreground">{subject.gradeAverageRank}</div>
+                          <div className="text-center">{subject.subjectRank}</div>
+                          <div className="text-center text-muted-foreground">{subject.classOverallRank}</div>
                           <div className={`text-center font-medium ${
-                            subject.rankDifference <= 0 ? 'text-green-600' :
+                            subject.rankDifference <= -3 ? 'text-green-600' :
+                            subject.rankDifference < 0 ? 'text-green-500' :
+                            subject.rankDifference === 0 ? 'text-gray-600' :
                             subject.rankDifference <= 2 ? 'text-yellow-600' :
                             'text-red-600'
                           }`}>
                             {subject.rankDifference > 0 ? '+' : ''}{subject.rankDifference}
+                            {subject.rankDifference > 0 ? ' ↓' : subject.rankDifference < 0 ? ' ↑' : ' '}
                           </div>
                           <div className="flex justify-center">
                             <Badge className={`${getStatusColor(subject.status)} gap-1`}>
