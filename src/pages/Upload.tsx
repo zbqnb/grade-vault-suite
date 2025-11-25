@@ -7,12 +7,15 @@ import { Label } from "@/components/ui/label";
 import { FileUpload } from "@/components/ui/file-upload";
 import { useExcelParser } from "@/hooks/useExcelParser";
 import { useToast } from "@/hooks/use-toast";
+import { AssessmentConfigDialog } from "@/components/AssessmentConfigDialog";
 
 const Upload = () => {
   const [selectedGrade, setSelectedGrade] = useState("");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedType, setSelectedType] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [showConfigDialog, setShowConfigDialog] = useState(false);
+  const [currentAssessmentId, setCurrentAssessmentId] = useState<number>(0);
   
   const { parseExcelFile, isLoading } = useExcelParser();
   const { toast } = useToast();
@@ -65,18 +68,31 @@ const Upload = () => {
     }
 
     try {
-      await parseExcelFile(selectedFile, {
+      const result = await parseExcelFile(selectedFile, {
         academicYear: currentAcademicYear,
         gradeLevel: selectedGrade,
         month: parseInt(selectedMonth),
         assessmentType: selectedType
       });
       
+      // 获取考试ID并打开配置对话框
+      if (result?.assessmentIds && result.assessmentIds.length > 0) {
+        setCurrentAssessmentId(result.assessmentIds[0]);
+        setShowConfigDialog(true);
+      }
+      
       // 重置表单
       setSelectedFile(null);
     } catch (error) {
       // 错误已在hook中处理
     }
+  };
+
+  const handleConfigSuccess = () => {
+    toast({
+      title: "配置完成",
+      description: "考试配置已保存，可以继续使用系统",
+    });
   };
 
   return (
@@ -307,6 +323,13 @@ const Upload = () => {
           </div>
         </div>
       </main>
+
+      <AssessmentConfigDialog
+        open={showConfigDialog}
+        assessmentId={currentAssessmentId}
+        onClose={() => setShowConfigDialog(false)}
+        onSuccess={handleConfigSuccess}
+      />
     </div>
   );
 };
