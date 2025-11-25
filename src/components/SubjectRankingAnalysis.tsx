@@ -37,6 +37,7 @@ interface SubjectRanking {
 }
 
 interface ClassRankingData {
+  schoolName: string;
   className: string;
   classAverageScore: number;
   classRank: number;
@@ -151,23 +152,35 @@ const SubjectRankingAnalysis = () => {
         // 使用所有匹配的考试 ID 获取数据
         const data = await getClassSubjectAverages(assessmentIds);
         
-        // 处理数据
-        const classMap = new Map<string, SubjectRanking[]>();
+        // 处理数据 - 使用学校+班级作为唯一标识
+        const classMap = new Map<string, { schoolName: string; className: string; subjects: SubjectRanking[] }>();
         const subjectRankSums = new Map<string, { sum: number; count: number }>();
         
         data.forEach((item: any) => {
-          if (!classMap.has(item.class_name)) {
-            classMap.set(item.class_name, []);
+          const classKey = `${item.school_name}_${item.class_name}`;
+          
+          if (!classMap.has(classKey)) {
+            classMap.set(classKey, {
+              schoolName: item.school_name,
+              className: item.class_name,
+              subjects: []
+            });
           }
           
-          classMap.get(item.class_name)!.push({
-            subjectName: item.subject_name,
-            classRank: item.rank_in_subject,
-            gradeAverageRank: 0, // 将在后面计算
-            rankDifference: 0,
-            status: 'excellent',
-            averageScore: item.average_score,
-          });
+          const classData = classMap.get(classKey)!;
+          
+          // 检查该科目是否已存在，避免重复
+          const existingSubject = classData.subjects.find(s => s.subjectName === item.subject_name);
+          if (!existingSubject) {
+            classData.subjects.push({
+              subjectName: item.subject_name,
+              classRank: item.rank_in_subject,
+              gradeAverageRank: 0, // 将在后面计算
+              rankDifference: 0,
+              status: 'excellent',
+              averageScore: item.average_score,
+            });
+          }
           
           // 累加每个科目的排名总和
           if (!subjectRankSums.has(item.subject_name)) {
@@ -186,7 +199,9 @@ const SubjectRankingAnalysis = () => {
         
         // 更新每个班级的科目排名数据
         const rankings: ClassRankingData[] = [];
-        classMap.forEach((subjectRankings, className) => {
+        classMap.forEach((classData) => {
+          const subjectRankings = classData.subjects;
+          
           // 计算班级平均分
           const classAvg = subjectRankings.reduce((sum, s) => sum + s.averageScore, 0) / subjectRankings.length;
           
@@ -209,7 +224,8 @@ const SubjectRankingAnalysis = () => {
           const problemCount = updatedSubjects.filter(s => s.status === 'poor').length;
           
           rankings.push({
-            className,
+            schoolName: classData.schoolName,
+            className: classData.className,
             classAverageScore: Math.round(classAvg * 100) / 100,
             classRank: 0, // 将在排序后计算
             totalClasses: classMap.size,
@@ -456,10 +472,12 @@ const SubjectRankingAnalysis = () => {
           ) : (
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
               {displayData.map((classData) => (
-                <Card key={classData.className} className="overflow-hidden">
+                <Card key={`${classData.schoolName}_${classData.className}`} className="overflow-hidden">
                   <CardHeader className="bg-muted/30 pb-3">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg">{classData.className}</CardTitle>
+                      <CardTitle className="text-lg">
+                        {classData.schoolName} - {classData.className}
+                      </CardTitle>
                       <div className="flex items-center gap-2">
                         <Badge variant="secondary">
                           排名 {classData.classRank}/{classData.totalClasses}
@@ -486,7 +504,7 @@ const SubjectRankingAnalysis = () => {
                       </div>
                       {classData.subjectRankings.map((subject) => (
                         <div
-                          key={subject.subjectName}
+                          key={`${classData.schoolName}_${classData.className}_${subject.subjectName}`}
                           className="grid grid-cols-5 gap-2 text-sm py-2 border-b last:border-0 items-center"
                         >
                           <div className="font-medium">{subject.subjectName}</div>
