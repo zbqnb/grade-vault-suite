@@ -126,7 +126,30 @@ const SubjectRankingAnalysis = () => {
       setError(null);
       
       try {
-        const data = await getClassSubjectAverages([selectedAssessment]);
+        // 获取所选考试的详细信息
+        const selectedAssessmentData = assessments.find(a => a.id === selectedAssessment);
+        if (!selectedAssessmentData) {
+          throw new Error('未找到选中的考试');
+        }
+        
+        // 查找所有学校中相同年级、月份、类型的考试
+        const { data: allMatchingAssessments, error: assessmentError } = await supabase
+          .from('assessments')
+          .select('id')
+          .eq('grade_level', selectedAssessmentData.grade_level)
+          .eq('month', selectedAssessmentData.month)
+          .eq('type', selectedAssessmentData.type)
+          .eq('academic_year', selectedAssessmentData.academic_year);
+        
+        if (assessmentError) {
+          throw new Error(`查询考试失败: ${assessmentError.message}`);
+        }
+        
+        // 获取所有匹配考试的 ID
+        const assessmentIds = allMatchingAssessments?.map(a => a.id) || [selectedAssessment];
+        
+        // 使用所有匹配的考试 ID 获取数据
+        const data = await getClassSubjectAverages(assessmentIds);
         
         // 处理数据
         const classMap = new Map<string, SubjectRanking[]>();
