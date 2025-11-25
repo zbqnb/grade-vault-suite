@@ -124,14 +124,14 @@ export const useExcelParser = () => {
       console.log("======================================================");
 
       // 5. 保存到數據庫
-      await saveToDatabase(records, metadata);
+      const assessmentIds = await saveToDatabase(records, metadata);
       
       toast({
         title: "上傳成功",
         description: `成功導入 ${debugLogs.length} 名學生的 ${records.length} 條成績記錄`,
       });
 
-      return records;
+      return { records, assessmentIds };
 
     } catch (error) {
       console.error('Excel解析或保存錯誤:', error);
@@ -146,7 +146,7 @@ export const useExcelParser = () => {
     }
   };
 
-  const saveToDatabase = async (records: ParsedRecord[], metadata: UploadMetadata) => {
+  const saveToDatabase = async (records: ParsedRecord[], metadata: UploadMetadata): Promise<number[]> => {
     try {
       // 1. 準備基礎數據並去重
       const uniqueSchools = [...new Set(records.map(r => r.schoolName))].map(name => ({ name }));
@@ -176,6 +176,7 @@ export const useExcelParser = () => {
         .select('id, school_id');
       if (assessmentsError) throw assessmentsError;
       const assessmentMap = new Map<number, number>(assessments.map(a => [a.school_id, a.id]));
+      const assessmentIds = assessments.map(a => a.id);
 
       // 4. 準備並批量 Upsert 班級 (Classes)
       const uniqueClasses = [...new Set(records.map(r => JSON.stringify({
@@ -230,6 +231,8 @@ export const useExcelParser = () => {
           .upsert(scoreUpserts, { onConflict: 'assessment_id,student_id,subject_id' });
         if (scoresError) throw scoresError;
       }
+
+      return assessmentIds;
 
     } catch (error) {
       console.error('數據庫保存錯誤:', error);

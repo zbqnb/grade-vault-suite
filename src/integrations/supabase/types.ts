@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      assessment_subjects: {
+        Row: {
+          assessment_id: number
+          created_at: string | null
+          excellent_threshold: number | null
+          full_score: number
+          id: number
+          pass_threshold: number | null
+          poor_threshold: number | null
+          subject_id: number
+          updated_at: string | null
+        }
+        Insert: {
+          assessment_id: number
+          created_at?: string | null
+          excellent_threshold?: number | null
+          full_score?: number
+          id?: number
+          pass_threshold?: number | null
+          poor_threshold?: number | null
+          subject_id: number
+          updated_at?: string | null
+        }
+        Update: {
+          assessment_id?: number
+          created_at?: string | null
+          excellent_threshold?: number | null
+          full_score?: number
+          id?: number
+          pass_threshold?: number | null
+          poor_threshold?: number | null
+          subject_id?: number
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assessment_subjects_assessment_id_fkey"
+            columns: ["assessment_id"]
+            isOneToOne: false
+            referencedRelation: "assessments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assessment_subjects_subject_id_fkey"
+            columns: ["subject_id"]
+            isOneToOne: false
+            referencedRelation: "subjects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       assessments: {
         Row: {
           academic_year: string
