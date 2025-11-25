@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import SubjectRankingAnalysis from "@/components/SubjectRankingAnalysis";
+import ScoreDistribution from "./ScoreDistribution";
 import { useNavigate } from "react-router-dom";
 
 const Analytics = () => {
@@ -17,8 +18,8 @@ const Analytics = () => {
       icon: BarChart3,
     },
     {
-      id: "score-trends",
-      title: "成绩趋势分析",
+      id: "score-distribution",
+      title: "一分一段分析",
       icon: TrendingUp,
     },
     {
@@ -59,7 +60,7 @@ const Analytics = () => {
             <SubjectRankingAnalysis />
           </div>
         );
-      case "score-trends":
+      case "score-distribution":
         return (
           <div className="space-y-6">
             <Button
@@ -70,19 +71,7 @@ const Analytics = () => {
               <Home className="h-4 w-4 mr-2" />
               返回主页
             </Button>
-            <div>
-              <h2 className="text-2xl font-bold">成绩趋势分析</h2>
-              <p className="text-muted-foreground mt-2">
-                分析不同时间段的成绩变化趋势
-              </p>
-            </div>
-            <Card>
-              <CardContent className="pt-6">
-                <div className="text-center py-12 text-muted-foreground">
-                  功能开发中...
-                </div>
-              </CardContent>
-            </Card>
+            <ScoreDistribution />
           </div>
         );
       case "class-comparison":
