@@ -1,11 +1,14 @@
 import { useState } from "react";
-import { BarChart3, TrendingUp, Users, FileText, Award, Target } from "lucide-react";
+import { BarChart3, TrendingUp, Users, FileText, Award, Target, Home } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import SubjectRankingAnalysis from "@/components/SubjectRankingAnalysis";
+import { useNavigate } from "react-router-dom";
 
 const Analytics = () => {
   const [selectedPage, setSelectedPage] = useState("subject-ranking");
+  const navigate = useNavigate();
 
   const navigationItems = [
     {
@@ -43,10 +46,30 @@ const Analytics = () => {
   const renderContent = () => {
     switch (selectedPage) {
       case "subject-ranking":
-        return <SubjectRankingAnalysis />;
+        return (
+          <div className="space-y-6">
+            <Button
+              variant="ghost"
+              onClick={() => navigate("/")}
+              className="mb-4"
+            >
+              <Home className="h-4 w-4 mr-2" />
+              返回主页
+            </Button>
+            <SubjectRankingAnalysis />
+          </div>
+        );
       case "score-trends":
         return (
           <div className="space-y-6">
+            <Button
+              variant="ghost"
+              onClick={() => navigate("/")}
+              className="mb-4"
+            >
+              <Home className="h-4 w-4 mr-2" />
+              返回主页
+            </Button>
             <div>
               <h2 className="text-2xl font-bold">成绩趋势分析</h2>
               <p className="text-muted-foreground mt-2">
@@ -65,6 +88,14 @@ const Analytics = () => {
       case "class-comparison":
         return (
           <div className="space-y-6">
+            <Button
+              variant="ghost"
+              onClick={() => navigate("/")}
+              className="mb-4"
+            >
+              <Home className="h-4 w-4 mr-2" />
+              返回主页
+            </Button>
             <div>
               <h2 className="text-2xl font-bold">班级对比分析</h2>
               <p className="text-muted-foreground mt-2">
@@ -83,6 +114,14 @@ const Analytics = () => {
       case "student-performance":
         return (
           <div className="space-y-6">
+            <Button
+              variant="ghost"
+              onClick={() => navigate("/")}
+              className="mb-4"
+            >
+              <Home className="h-4 w-4 mr-2" />
+              返回主页
+            </Button>
             <div>
               <h2 className="text-2xl font-bold">学生表现分析</h2>
               <p className="text-muted-foreground mt-2">
@@ -101,6 +140,14 @@ const Analytics = () => {
       case "ranking-stats":
         return (
           <div className="space-y-6">
+            <Button
+              variant="ghost"
+              onClick={() => navigate("/")}
+              className="mb-4"
+            >
+              <Home className="h-4 w-4 mr-2" />
+              返回主页
+            </Button>
             <div>
               <h2 className="text-2xl font-bold">排名统计分析</h2>
               <p className="text-muted-foreground mt-2">
@@ -119,6 +166,14 @@ const Analytics = () => {
       case "comprehensive-report":
         return (
           <div className="space-y-6">
+            <Button
+              variant="ghost"
+              onClick={() => navigate("/")}
+              className="mb-4"
+            >
+              <Home className="h-4 w-4 mr-2" />
+              返回主页
+            </Button>
             <div>
               <h2 className="text-2xl font-bold">综合报告</h2>
               <p className="text-muted-foreground mt-2">
