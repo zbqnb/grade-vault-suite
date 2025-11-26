@@ -15,7 +15,7 @@ const Upload = () => {
   const [selectedType, setSelectedType] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [showConfigDialog, setShowConfigDialog] = useState(false);
-  const [currentAssessmentId, setCurrentAssessmentId] = useState<number>(0);
+  const [currentAssessmentIds, setCurrentAssessmentIds] = useState<number[]>([]);
   
   const { parseExcelFile, isLoading } = useExcelParser();
   const { toast } = useToast();
@@ -75,9 +75,9 @@ const Upload = () => {
         assessmentType: selectedType
       });
       
-      // 获取考试ID并打开配置对话框
+      // 获取所有考试ID并打开配置对话框
       if (result?.assessmentIds && result.assessmentIds.length > 0) {
-        setCurrentAssessmentId(result.assessmentIds[0]);
+        setCurrentAssessmentIds(result.assessmentIds);
         setShowConfigDialog(true);
       }
       
@@ -326,7 +326,7 @@ const Upload = () => {
 
       <AssessmentConfigDialog
         open={showConfigDialog}
-        assessmentId={currentAssessmentId}
+        assessmentIds={currentAssessmentIds}
         onClose={() => setShowConfigDialog(false)}
         onSuccess={handleConfigSuccess}
       />

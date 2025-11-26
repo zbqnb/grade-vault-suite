@@ -22,12 +22,12 @@ interface ConfigData {
 
 interface AssessmentConfigDialogProps {
   open: boolean;
-  assessmentId: number;
+  assessmentIds: number[];
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export const AssessmentConfigDialog = ({ open, assessmentId, onClose, onSuccess }: AssessmentConfigDialogProps) => {
+export const AssessmentConfigDialog = ({ open, assessmentIds, onClose, onSuccess }: AssessmentConfigDialogProps) => {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -89,14 +89,17 @@ export const AssessmentConfigDialog = ({ open, assessmentId, onClose, onSuccess 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const upsertData = subjects.map(subject => ({
-        assessment_id: assessmentId,
-        subject_id: subject.id,
-        full_score: configs[subject.id].full_score,
-        excellent_threshold: configs[subject.id].excellent_threshold,
-        pass_threshold: configs[subject.id].pass_threshold,
-        poor_threshold: configs[subject.id].poor_threshold,
-      }));
+      // 为每个 assessment 创建配置数据
+      const upsertData = assessmentIds.flatMap(assessmentId =>
+        subjects.map(subject => ({
+          assessment_id: assessmentId,
+          subject_id: subject.id,
+          full_score: configs[subject.id].full_score,
+          excellent_threshold: configs[subject.id].excellent_threshold,
+          pass_threshold: configs[subject.id].pass_threshold,
+          poor_threshold: configs[subject.id].poor_threshold,
+        }))
+      );
 
       const { error } = await supabase
         .from('assessment_subjects')
@@ -106,7 +109,7 @@ export const AssessmentConfigDialog = ({ open, assessmentId, onClose, onSuccess 
 
       toast({
         title: "保存成功",
-        description: "考试配置已保存",
+        description: `已为 ${assessmentIds.length} 个考试批量配置满分和三率`,
       });
 
       onSuccess();
@@ -129,7 +132,7 @@ export const AssessmentConfigDialog = ({ open, assessmentId, onClose, onSuccess 
         <DialogHeader>
           <DialogTitle>考试配置</DialogTitle>
           <DialogDescription>
-            请完善本次考试的满分、优秀率等信息
+            请完善本次考试的满分、优秀率等信息（将应用到 {assessmentIds.length} 个考试）
           </DialogDescription>
         </DialogHeader>
 
