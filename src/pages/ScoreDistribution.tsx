@@ -51,7 +51,11 @@ const ScoreDistribution = () => {
             newData.set(subjectId, {
               subjectId,
               subjectName: subjectMap.get(subjectId) || '',
-              ...stats,
+              averageScore: stats.averageScore,
+              passRate: stats.passRate,
+              excellenceRate: stats.excellenceRate,
+              poorRate: stats.poorRate,
+              configMissing: stats.configMissing,
               segmentGroups
             });
           } catch (error) {
@@ -133,6 +137,7 @@ const ScoreDistribution = () => {
                 passRate={data.passRate}
                 excellenceRate={data.excellenceRate}
                 poorRate={data.poorRate}
+                configMissing={data.configMissing}
               />
             ))}
           </div>

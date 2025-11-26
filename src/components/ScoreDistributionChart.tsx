@@ -1,14 +1,17 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-react";
 import { SegmentGroup } from "@/utils/scoreDistributionQuery";
 
 interface ScoreDistributionChartProps {
   subjectName: string;
   segmentGroups: SegmentGroup[];
-  averageScore: number;
-  passRate: number;
-  excellenceRate: number;
-  poorRate: number;
+  averageScore: number | null;
+  passRate: number | null;
+  excellenceRate: number | null;
+  poorRate: number | null;
+  configMissing?: boolean;
 }
 
 const groupColors = {
@@ -31,8 +34,28 @@ export const ScoreDistributionChart = ({
   averageScore,
   passRate,
   excellenceRate,
-  poorRate
+  poorRate,
+  configMissing
 }: ScoreDistributionChartProps) => {
+  // 如果配置缺失，显示警告信息
+  if (configMissing) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>{subjectName}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              该科目数据录入时并未完善满分与三率（优秀线、及格线、差生线）配置，无法计算分段统计。请先配置该科目的评分标准。
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
+    );
+  }
+
   // 找到最大人数用于计算百分比宽度
   const maxCount = Math.max(
     ...segmentGroups.flatMap(group => 

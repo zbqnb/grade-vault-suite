@@ -29,11 +29,12 @@ export interface SegmentGroup {
 export interface DistributionData {
   subjectId: number;
   subjectName: string;
-  averageScore: number;
-  passRate: number;
-  excellenceRate: number;
-  poorRate: number;
+  averageScore: number | null;
+  passRate: number | null;
+  excellenceRate: number | null;
+  poorRate: number | null;
   segmentGroups: SegmentGroup[];
+  configMissing?: boolean;
 }
 
 /**
@@ -106,22 +107,37 @@ export const calculateSubjectStats = async (
   assessmentId: number,
   subjectId: number
 ): Promise<{
-  averageScore: number;
-  passRate: number;
-  excellenceRate: number;
-  poorRate: number;
+  averageScore: number | null;
+  passRate: number | null;
+  excellenceRate: number | null;
+  poorRate: number | null;
+  configMissing: boolean;
 }> => {
   // 获取该科目的分数线配置
-  const { data: config } = await supabase
+  const { data: config, error } = await supabase
     .from('assessment_subjects')
-    .select('excellent_threshold, pass_threshold, poor_threshold')
+    .select('excellent_threshold, pass_threshold, poor_threshold, full_score')
     .eq('assessment_id', assessmentId)
     .eq('subject_id', subjectId)
-    .single();
+    .maybeSingle();
 
-  const excellentThreshold = config?.excellent_threshold || 85;
-  const passThreshold = config?.pass_threshold || 60;
-  const poorThreshold = config?.poor_threshold || 30;
+  // 如果没有配置或配置不完整，返回配置缺失标记
+  if (!config || 
+      config.excellent_threshold === null || 
+      config.pass_threshold === null || 
+      config.poor_threshold === null) {
+    return {
+      averageScore: null,
+      passRate: null,
+      excellenceRate: null,
+      poorRate: null,
+      configMissing: true
+    };
+  }
+
+  const excellentThreshold = config.excellent_threshold;
+  const passThreshold = config.pass_threshold;
+  const poorThreshold = config.poor_threshold;
 
   // 获取所有成绩
   const { data: scores } = await supabase
@@ -136,7 +152,8 @@ export const calculateSubjectStats = async (
       averageScore: 0,
       passRate: 0,
       excellenceRate: 0,
-      poorRate: 0
+      poorRate: 0,
+      configMissing: false
     };
   }
 
@@ -152,6 +169,7 @@ export const calculateSubjectStats = async (
     averageScore: Math.round(averageScore * 100) / 100,
     passRate: Math.round((passCount / totalStudents) * 10000) / 100,
     excellenceRate: Math.round((excellentCount / totalStudents) * 10000) / 100,
-    poorRate: Math.round((poorCount / totalStudents) * 10000) / 100
+    poorRate: Math.round((poorCount / totalStudents) * 10000) / 100,
+    configMissing: false
   };
 };
