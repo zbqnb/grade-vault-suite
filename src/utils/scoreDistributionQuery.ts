@@ -135,9 +135,10 @@ export const calculateSubjectStats = async (
     };
   }
 
-  const excellentThreshold = config.excellent_threshold;
-  const passThreshold = config.pass_threshold;
-  const poorThreshold = config.poor_threshold;
+  // 将百分比转换为实际分数线
+  const excellentThreshold = config.full_score * (config.excellent_threshold / 100);
+  const passThreshold = config.full_score * (config.pass_threshold / 100);
+  const poorThreshold = config.full_score * (config.poor_threshold / 100);
 
   // 获取所有成绩
   const { data: scores } = await supabase
