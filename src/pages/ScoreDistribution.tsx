@@ -22,6 +22,7 @@ const ScoreDistribution = () => {
     assessmentId: number;
     subjectIds: number[];
     sortOption: string;
+    classId?: number;
   }) => {
     setLoading(true);
     setSortOption(filters.sortOption);
@@ -42,8 +43,8 @@ const ScoreDistribution = () => {
         filters.subjectIds.map(async (subjectId) => {
           try {
             const [segments, stats] = await Promise.all([
-              getScoreDistribution(filters.assessmentId, subjectId),
-              calculateSubjectStats(filters.assessmentId, subjectId)
+              getScoreDistribution(filters.assessmentId, subjectId, filters.classId),
+              calculateSubjectStats(filters.assessmentId, subjectId, filters.classId)
             ]);
 
             const segmentGroups = groupSegments(segments);

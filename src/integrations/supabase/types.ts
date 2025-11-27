@@ -364,20 +364,39 @@ export type Database = {
           subject_name: string
         }[]
       }
-      get_dynamic_score_distribution: {
-        Args: { p_assessment_id: number; p_subject_id: number }
-        Returns: {
-          group_name: string
-          group_subtotal: number
-          group_subtotal_percentage: number
-          group_type: string
-          max_score: number
-          min_score: number
-          percentage: number
-          score_range: string
-          student_count: number
-        }[]
-      }
+      get_dynamic_score_distribution:
+        | {
+            Args: {
+              p_assessment_id: number
+              p_class_id?: number
+              p_subject_id: number
+            }
+            Returns: {
+              group_name: string
+              group_subtotal: number
+              group_subtotal_percentage: number
+              group_type: string
+              max_score: number
+              min_score: number
+              percentage: number
+              score_range: string
+              student_count: number
+            }[]
+          }
+        | {
+            Args: { p_assessment_id: number; p_subject_id: number }
+            Returns: {
+              group_name: string
+              group_subtotal: number
+              group_subtotal_percentage: number
+              group_type: string
+              max_score: number
+              min_score: number
+              percentage: number
+              score_range: string
+              student_count: number
+            }[]
+          }
       get_school_subject_averages: {
         Args: { target_assessment_ids: number[] }
         Returns: {

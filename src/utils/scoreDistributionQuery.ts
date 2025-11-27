@@ -42,11 +42,13 @@ export interface DistributionData {
  */
 export const getScoreDistribution = async (
   assessmentId: number,
-  subjectId: number
+  subjectId: number,
+  classId?: number
 ): Promise<SegmentData[]> => {
   const { data, error } = await supabase.rpc('get_dynamic_score_distribution', {
     p_assessment_id: assessmentId,
-    p_subject_id: subjectId
+    p_subject_id: subjectId,
+    p_class_id: classId || null
   });
 
   if (error) {
@@ -105,7 +107,8 @@ export const groupSegments = (segments: SegmentData[]): SegmentGroup[] => {
  */
 export const calculateSubjectStats = async (
   assessmentId: number,
-  subjectId: number
+  subjectId: number,
+  classId?: number
 ): Promise<{
   averageScore: number | null;
   passRate: number | null;
@@ -141,12 +144,19 @@ export const calculateSubjectStats = async (
   const poorThreshold = config.full_score * (config.poor_threshold / 100);
 
   // 获取所有成绩
-  const { data: scores } = await supabase
+  let scoresQuery = supabase
     .from('individual_scores')
-    .select('score_value')
+    .select('score_value, student_id, students!inner(class_id)')
     .eq('assessment_id', assessmentId)
     .eq('subject_id', subjectId)
     .not('score_value', 'is', null);
+
+  // 如果指定了班级，添加班级筛选
+  if (classId) {
+    scoresQuery = scoresQuery.eq('students.class_id', classId);
+  }
+
+  const { data: scores } = await scoresQuery;
 
   if (!scores || scores.length === 0) {
     return {
