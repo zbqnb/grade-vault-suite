@@ -26,12 +26,18 @@ interface Subject {
   name: string;
 }
 
+interface Class {
+  id: number;
+  name: string;
+}
+
 interface ScoreDistributionFilterProps {
   onQuery: (filters: {
     schoolId: number;
     assessmentId: number;
     subjectIds: number[];
     sortOption: string;
+    classId?: number;
   }) => void;
 }
 
@@ -41,10 +47,12 @@ export const ScoreDistributionFilter = ({ onQuery }: ScoreDistributionFilterProp
   const [schools, setSchools] = useState<School[]>([]);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [classes, setClasses] = useState<Class[]>([]);
   
   const [selectedSchool, setSelectedSchool] = useState<number | null>(null);
   const [selectedAssessment, setSelectedAssessment] = useState<number | null>(null);
   const [selectedSubjects, setSelectedSubjects] = useState<Set<number>>(new Set());
+  const [selectedClass, setSelectedClass] = useState<number>(0);
   const [sortOption, setSortOption] = useState<string>('avgDesc');
 
   // 加载学校列表
@@ -97,7 +105,7 @@ export const ScoreDistributionFilter = ({ onQuery }: ScoreDistributionFilterProp
     loadSubjects();
   }, [toast]);
 
-  // 学校改变时加载考试列表
+  // 学校改变时加载考试列表和班级列表
   useEffect(() => {
     if (!selectedSchool) return;
 
@@ -125,7 +133,29 @@ export const ScoreDistributionFilter = ({ onQuery }: ScoreDistributionFilterProp
       }
     };
 
+    const loadClasses = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('classes')
+          .select('id, name')
+          .eq('school_id', selectedSchool)
+          .order('name');
+
+        if (error) throw error;
+        setClasses(data || []);
+        setSelectedClass(0);
+      } catch (error) {
+        console.error('加载班级失败:', error);
+        toast({
+          title: "加载失败",
+          description: "无法加载班级列表",
+          variant: "destructive"
+        });
+      }
+    };
+
     loadAssessments();
+    loadClasses();
   }, [selectedSchool, toast]);
 
   const handleSubjectToggle = (subjectId: number) => {
@@ -161,7 +191,8 @@ export const ScoreDistributionFilter = ({ onQuery }: ScoreDistributionFilterProp
       schoolId: selectedSchool,
       assessmentId: selectedAssessment,
       subjectIds: Array.from(selectedSubjects),
-      sortOption
+      sortOption,
+      classId: selectedClass || undefined
     });
   };
 
@@ -223,22 +254,29 @@ export const ScoreDistributionFilter = ({ onQuery }: ScoreDistributionFilterProp
         <div className="space-y-2">
           <Label>科目</Label>
           <div className="space-y-2 max-h-48 overflow-y-auto">
-            {subjects.map(subject => (
-              <div key={subject.id} className="flex items-center space-x-2">
-                <Checkbox
-                  id={`subject-${subject.id}`}
-                  checked={selectedSubjects.has(subject.id)}
-                  onCheckedChange={() => handleSubjectToggle(subject.id)}
-                />
-                <label
-                  htmlFor={`subject-${subject.id}`}
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                >
-                  {subject.name}
-                </label>
-              </div>
-            ))}
+...
           </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label>班级</Label>
+          <Select
+            value={selectedClass.toString()}
+            onValueChange={(value) => setSelectedClass(Number(value))}
+            disabled={!selectedSchool}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="选择班级" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="0">全部班级</SelectItem>
+              {classes.map((cls) => (
+                <SelectItem key={cls.id} value={cls.id.toString()}>
+                  {cls.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="space-y-2">
