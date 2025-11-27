@@ -254,7 +254,21 @@ export const ScoreDistributionFilter = ({ onQuery }: ScoreDistributionFilterProp
         <div className="space-y-2">
           <Label>科目</Label>
           <div className="space-y-2 max-h-48 overflow-y-auto">
-...
+            {subjects.map(subject => (
+              <div key={subject.id} className="flex items-center space-x-2">
+                <Checkbox
+                  id={`subject-${subject.id}`}
+                  checked={selectedSubjects.has(subject.id)}
+                  onCheckedChange={() => handleSubjectToggle(subject.id)}
+                />
+                <Label 
+                  htmlFor={`subject-${subject.id}`}
+                  className="cursor-pointer"
+                >
+                  {subject.name}
+                </Label>
+              </div>
+            ))}
           </div>
         </div>
 
