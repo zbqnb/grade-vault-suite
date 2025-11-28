@@ -55,7 +55,6 @@ export const ScoreDistributionFilter = ({ onQuery }: ScoreDistributionFilterProp
   const [selectedClass, setSelectedClass] = useState<number>(0);
   const [sortOption, setSortOption] = useState<string>('avgDesc');
 
-  // 加载学校列表
   useEffect(() => {
     const loadSchools = async () => {
       try {
@@ -105,7 +104,6 @@ export const ScoreDistributionFilter = ({ onQuery }: ScoreDistributionFilterProp
     loadSubjects();
   }, [toast]);
 
-  // 学校改变时加载考试列表和班级列表
   useEffect(() => {
     if (!selectedSchool) return;
 
@@ -168,6 +166,14 @@ export const ScoreDistributionFilter = ({ onQuery }: ScoreDistributionFilterProp
     setSelectedSubjects(newSelected);
   };
 
+  const toggleAllSubjects = () => {
+    if (selectedSubjects.size === subjects.length) {
+      setSelectedSubjects(new Set());
+    } else {
+      setSelectedSubjects(new Set(subjects.map(s => s.id)));
+    }
+  };
+
   const handleQuery = () => {
     if (!selectedSchool || !selectedAssessment) {
       toast({
@@ -198,7 +204,7 @@ export const ScoreDistributionFilter = ({ onQuery }: ScoreDistributionFilterProp
 
   if (loading) {
     return (
-      <Card className="w-64 flex-shrink-0">
+      <Card className="shadow-lg">
         <CardContent className="flex items-center justify-center py-8">
           <Loader2 className="h-6 w-6 animate-spin" />
         </CardContent>
@@ -207,109 +213,135 @@ export const ScoreDistributionFilter = ({ onQuery }: ScoreDistributionFilterProp
   }
 
   return (
-    <Card className="w-64 flex-shrink-0">
-      <CardHeader>
-        <CardTitle>筛选条件</CardTitle>
+    <Card className="shadow-lg border-muted/40">
+      <CardHeader className="bg-gradient-to-r from-muted/50 to-transparent">
+        <CardTitle className="text-lg flex items-center gap-2">
+          <div className="h-1 w-8 bg-primary rounded-full" />
+          筛选条件
+        </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label>学校</Label>
-          <Select 
-            value={selectedSchool?.toString()} 
-            onValueChange={(v) => setSelectedSchool(Number(v))}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="选择学校" />
-            </SelectTrigger>
-            <SelectContent>
-              {schools.map(school => (
-                <SelectItem key={school.id} value={school.id.toString()}>
-                  {school.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <CardContent className="p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          {/* School */}
+          <div className="space-y-2">
+            <Label className="text-muted-foreground">学校</Label>
+            <Select 
+              value={selectedSchool?.toString()} 
+              onValueChange={(v) => setSelectedSchool(Number(v))}
+            >
+              <SelectTrigger className="hover:border-primary/50 transition-colors">
+                <SelectValue placeholder="选择学校" />
+              </SelectTrigger>
+              <SelectContent>
+                {schools.map(school => (
+                  <SelectItem key={school.id} value={school.id.toString()}>
+                    {school.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-        <div className="space-y-2">
-          <Label>考试</Label>
-          <Select 
-            value={selectedAssessment?.toString()} 
-            onValueChange={(v) => setSelectedAssessment(Number(v))}
-            disabled={!selectedSchool}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="选择考试" />
-            </SelectTrigger>
-            <SelectContent>
-              {assessments.map(assessment => (
-                <SelectItem key={assessment.id} value={assessment.id.toString()}>
-                  {assessment.academic_year} - {assessment.month}月 - {assessment.type}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+          {/* Assessment */}
+          <div className="space-y-2">
+            <Label className="text-muted-foreground">考试</Label>
+            <Select 
+              value={selectedAssessment?.toString()} 
+              onValueChange={(v) => setSelectedAssessment(Number(v))}
+              disabled={!selectedSchool}
+            >
+              <SelectTrigger className="hover:border-primary/50 transition-colors">
+                <SelectValue placeholder="选择考试" />
+              </SelectTrigger>
+              <SelectContent>
+                {assessments.map(assessment => (
+                  <SelectItem key={assessment.id} value={assessment.id.toString()}>
+                    {assessment.academic_year} - {assessment.month}月 - {assessment.type}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-        <div className="space-y-2">
-          <Label>科目</Label>
-          <div className="space-y-2 max-h-48 overflow-y-auto">
-            {subjects.map(subject => (
-              <div key={subject.id} className="flex items-center space-x-2">
-                <Checkbox
-                  id={`subject-${subject.id}`}
-                  checked={selectedSubjects.has(subject.id)}
-                  onCheckedChange={() => handleSubjectToggle(subject.id)}
-                />
-                <Label 
-                  htmlFor={`subject-${subject.id}`}
-                  className="cursor-pointer"
-                >
-                  {subject.name}
-                </Label>
-              </div>
-            ))}
+          {/* Class */}
+          <div className="space-y-2">
+            <Label className="text-muted-foreground">班级</Label>
+            <Select
+              value={selectedClass.toString()}
+              onValueChange={(value) => setSelectedClass(Number(value))}
+              disabled={!selectedSchool}
+            >
+              <SelectTrigger className="hover:border-primary/50 transition-colors">
+                <SelectValue placeholder="选择班级" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="0">全部班级</SelectItem>
+                {classes.map((cls) => (
+                  <SelectItem key={cls.id} value={cls.id.toString()}>
+                    {cls.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Sort Option */}
+          <div className="space-y-2">
+            <Label className="text-muted-foreground">排序方式</Label>
+            <Select value={sortOption} onValueChange={setSortOption}>
+              <SelectTrigger className="hover:border-primary/50 transition-colors">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="avgDesc">按平均分降序</SelectItem>
+                <SelectItem value="excellenceDesc">按优秀率降序</SelectItem>
+                <SelectItem value="passDesc">按及格率降序</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Subjects */}
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <Label className="text-muted-foreground">科目</Label>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleAllSubjects}
+                className="h-auto p-1 text-xs text-primary hover:bg-primary/10"
+              >
+                {selectedSubjects.size === subjects.length ? '取消' : '全选'}
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto p-2 border rounded-md bg-muted/30">
+              {subjects.map(subject => (
+                <div key={subject.id} className="flex items-center space-x-2 hover:bg-muted/50 p-1 rounded transition-colors">
+                  <Checkbox
+                    id={`subject-${subject.id}`}
+                    checked={selectedSubjects.has(subject.id)}
+                    onCheckedChange={() => handleSubjectToggle(subject.id)}
+                  />
+                  <Label 
+                    htmlFor={`subject-${subject.id}`}
+                    className="cursor-pointer text-sm"
+                  >
+                    {subject.name}
+                  </Label>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
-        <div className="space-y-2">
-          <Label>班级</Label>
-          <Select
-            value={selectedClass.toString()}
-            onValueChange={(value) => setSelectedClass(Number(value))}
-            disabled={!selectedSchool}
+        {/* Query Button */}
+        <div className="mt-6">
+          <Button 
+            onClick={handleQuery} 
+            className="w-full md:w-auto px-8 shadow-md hover:shadow-lg transition-all"
           >
-            <SelectTrigger>
-              <SelectValue placeholder="选择班级" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="0">全部班级</SelectItem>
-              {classes.map((cls) => (
-                <SelectItem key={cls.id} value={cls.id.toString()}>
-                  {cls.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            查询
+          </Button>
         </div>
-
-        <div className="space-y-2">
-          <Label>排序方式</Label>
-          <Select value={sortOption} onValueChange={setSortOption}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="avgDesc">按平均分降序</SelectItem>
-              <SelectItem value="excellenceDesc">按优秀率降序</SelectItem>
-              <SelectItem value="passDesc">按及格率降序</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <Button onClick={handleQuery} className="w-full">
-          查询
-        </Button>
       </CardContent>
     </Card>
   );
