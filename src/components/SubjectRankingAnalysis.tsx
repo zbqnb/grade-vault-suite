@@ -4,10 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
-import { TrendingUp, TrendingDown, Minus, AlertCircle, Loader2 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Check, ChevronsUpDown, TrendingUp, TrendingDown, Minus, AlertCircle, Loader2, X } from "lucide-react";
 import { getClassSubjectAverages } from "@/utils/supabaseQuery";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 interface School {
   id: number;
@@ -484,30 +486,84 @@ const SubjectRankingAnalysis = () => {
               </Select>
             </div>
 
-            {/* Subject Selection */}
+            {/* Subject Selection - Combobox */}
             <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <label className="text-sm font-medium text-muted-foreground">科目</label>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={toggleAllSubjects}
-                  className="h-auto p-1 text-xs text-primary hover:bg-primary/10"
-                >
-                  {selectedSubjects.size === subjects.length ? '取消全选' : '全选'}
-                </Button>
-              </div>
-              <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto p-2 border rounded-md bg-muted/30">
-                {subjects.map((subject) => (
-                  <label key={subject.id} className="flex items-center space-x-2 cursor-pointer hover:bg-muted/50 p-1 rounded transition-colors">
-                    <Checkbox
-                      checked={selectedSubjects.has(subject.name)}
-                      onCheckedChange={() => toggleSubject(subject.name)}
-                    />
-                    <span className="text-sm">{subject.name}</span>
-                  </label>
-                ))}
-              </div>
+              <label className="text-sm font-medium text-muted-foreground">科目</label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    className={cn(
+                      "w-full justify-between hover:border-primary/50 transition-colors",
+                      selectedSubjects.size === 0 && "text-muted-foreground"
+                    )}
+                  >
+                    <span className="truncate">
+                      {selectedSubjects.size === 0
+                        ? "选择科目..."
+                        : `已选择 ${selectedSubjects.size} 个科目`}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-full p-0 bg-background z-50" align="start">
+                  <Command className="bg-background">
+                    <CommandInput placeholder="搜索科目..." className="h-9" />
+                    <CommandList>
+                      <CommandEmpty>未找到科目</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          onSelect={toggleAllSubjects}
+                          className="cursor-pointer"
+                        >
+                          <div className={cn(
+                            "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                            selectedSubjects.size === subjects.length
+                              ? "bg-primary text-primary-foreground"
+                              : "opacity-50 [&_svg]:invisible"
+                          )}>
+                            <Check className="h-4 w-4" />
+                          </div>
+                          <span className="font-medium">全选/取消全选</span>
+                        </CommandItem>
+                        {subjects.map((subject) => (
+                          <CommandItem
+                            key={subject.id}
+                            onSelect={() => toggleSubject(subject.name)}
+                            className="cursor-pointer"
+                          >
+                            <div className={cn(
+                              "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                              selectedSubjects.has(subject.name)
+                                ? "bg-primary text-primary-foreground"
+                                : "opacity-50 [&_svg]:invisible"
+                            )}>
+                              <Check className="h-4 w-4" />
+                            </div>
+                            {subject.name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {selectedSubjects.size > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {Array.from(selectedSubjects).map((subjectName) => (
+                    <Badge
+                      key={subjectName}
+                      variant="secondary"
+                      className="cursor-pointer hover:bg-secondary/80"
+                      onClick={() => toggleSubject(subjectName)}
+                    >
+                      {subjectName}
+                      <X className="ml-1 h-3 w-3" />
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </CardContent>
