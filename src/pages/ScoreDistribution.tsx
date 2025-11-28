@@ -10,12 +10,18 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 const ScoreDistribution = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [distributionData, setDistributionData] = useState<Map<number, DistributionData>>(new Map());
   const [sortOption, setSortOption] = useState<string>('avgDesc');
+  const [filterInfo, setFilterInfo] = useState<{
+    schoolName?: string;
+    assessmentName?: string;
+    className?: string;
+  }>({});
 
   const handleQuery = async (filters: {
     schoolId: number;
@@ -30,7 +36,37 @@ const ScoreDistribution = () => {
     try {
       const newData = new Map<number, DistributionData>();
 
-      // 获取科目名称
+      // Get school and assessment info for display
+      const { data: schoolData } = await supabase
+        .from('schools')
+        .select('name')
+        .eq('id', filters.schoolId)
+        .single();
+
+      const { data: assessmentData } = await supabase
+        .from('assessments')
+        .select('academic_year, month, type')
+        .eq('id', filters.assessmentId)
+        .single();
+
+      let className = undefined;
+      if (filters.classId) {
+        const { data: classData } = await supabase
+          .from('classes')
+          .select('name')
+          .eq('id', filters.classId)
+          .single();
+        className = classData?.name;
+      }
+
+      setFilterInfo({
+        schoolName: schoolData?.name,
+        assessmentName: assessmentData ? 
+          `${assessmentData.academic_year}年${assessmentData.month}月${assessmentData.type}` : 
+          undefined,
+        className
+      });
+
       const { data: subjects } = await supabase
         .from('subjects')
         .select('id, name')
@@ -38,7 +74,6 @@ const ScoreDistribution = () => {
 
       const subjectMap = new Map(subjects?.map(s => [s.id, s.name]) || []);
 
-      // 并行获取所有科目的数据
       await Promise.all(
         filters.subjectIds.map(async (subjectId) => {
           try {
@@ -86,7 +121,6 @@ const ScoreDistribution = () => {
     }
   };
 
-  // 排序数据
   const sortedData = useMemo(() => {
     const dataArray = Array.from(distributionData.values());
 
@@ -103,43 +137,75 @@ const ScoreDistribution = () => {
   }, [distributionData, sortOption]);
 
   return (
-    <div className="flex gap-6 h-full">
-      <ScoreDistributionFilter onQuery={handleQuery} />
-      
-      <div className="flex-1 overflow-y-auto space-y-4">
-        <div>
-          <h1 className="text-3xl font-bold">各科目一分一段分析</h1>
-          <p className="text-muted-foreground mt-2">
-            展示学生成绩的分布情况，帮助了解不同层次学生的比例
-          </p>
-        </div>
+    <div className="space-y-6 animate-fade-in">
+      {/* Header Section */}
+      <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-6 rounded-lg border border-primary/20 shadow-sm">
+        <h2 className="text-3xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+          一分一段分析
+        </h2>
+        <p className="text-muted-foreground mt-2">
+          展示学生成绩的分布情况，帮助了解不同层次学生的比例
+        </p>
+        {filterInfo.schoolName && (
+          <div className="flex gap-4 mt-4 flex-wrap">
+            <Badge variant="secondary" className="text-sm px-3 py-1">
+              学校: {filterInfo.schoolName}
+            </Badge>
+            {filterInfo.assessmentName && (
+              <Badge variant="secondary" className="text-sm px-3 py-1">
+                考试: {filterInfo.assessmentName}
+              </Badge>
+            )}
+            {filterInfo.className && (
+              <Badge variant="secondary" className="text-sm px-3 py-1">
+                班级: {filterInfo.className}
+              </Badge>
+            )}
+            {!filterInfo.className && (
+              <Badge variant="secondary" className="text-sm px-3 py-1">
+                全部班级
+              </Badge>
+            )}
+          </div>
+        )}
+      </div>
 
+      {/* Filter Section */}
+      <ScoreDistributionFilter onQuery={handleQuery} />
+
+      {/* Results Section */}
+      <div className="space-y-4">
         {loading && (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin" />
-            <span className="ml-2">加载中...</span>
+          <div className="flex items-center justify-center py-12 bg-card rounded-lg border shadow-sm">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <span className="ml-3 text-muted-foreground font-medium">加载中...</span>
           </div>
         )}
 
         {!loading && distributionData.size === 0 && (
-          <div className="text-center py-12 text-muted-foreground">
-            请选择筛选条件并点击查询按钮
+          <div className="text-center py-12 bg-card rounded-lg border shadow-sm">
+            <p className="text-muted-foreground">请选择筛选条件并点击查询按钮</p>
           </div>
         )}
 
         {!loading && sortedData.length > 0 && (
           <div className="space-y-4">
-            {sortedData.map((data) => (
-              <ScoreDistributionChart
+            {sortedData.map((data, index) => (
+              <div 
                 key={data.subjectId}
-                subjectName={data.subjectName}
-                segmentGroups={data.segmentGroups}
-                averageScore={data.averageScore}
-                passRate={data.passRate}
-                excellenceRate={data.excellenceRate}
-                poorRate={data.poorRate}
-                configMissing={data.configMissing}
-              />
+                className="animate-fade-in"
+                style={{ animationDelay: `${index * 50}ms` }}
+              >
+                <ScoreDistributionChart
+                  subjectName={data.subjectName}
+                  segmentGroups={data.segmentGroups}
+                  averageScore={data.averageScore}
+                  passRate={data.passRate}
+                  excellenceRate={data.excellenceRate}
+                  poorRate={data.poorRate}
+                  configMissing={data.configMissing}
+                />
+              </div>
             ))}
           </div>
         )}

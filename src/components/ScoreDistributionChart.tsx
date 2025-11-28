@@ -64,44 +64,63 @@ export const ScoreDistributionChart = ({
   );
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <span>{subjectName}</span>
-          <div className="flex gap-2">
-            <Badge variant="outline">平均分: {averageScore}</Badge>
-            <Badge variant="outline">优秀率: {excellenceRate}%</Badge>
-            <Badge variant="outline">及格率: {passRate}%</Badge>
-            <Badge variant="outline">差生率: {poorRate}%</Badge>
+    <Card className="shadow-lg hover:shadow-xl transition-all duration-300 border-muted/40">
+      <CardHeader className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border-b">
+        <CardTitle className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <span className="text-xl font-bold">{subjectName}</span>
+          <div className="flex gap-2 flex-wrap">
+            <Badge variant="outline" className="shadow-sm border-primary/30 bg-background/80">
+              平均分: <span className="font-bold ml-1">{averageScore}</span>
+            </Badge>
+            <Badge variant="outline" className="shadow-sm border-green-300 bg-green-50/80 text-green-700">
+              优秀率: <span className="font-bold ml-1">{excellenceRate}%</span>
+            </Badge>
+            <Badge variant="outline" className="shadow-sm border-blue-300 bg-blue-50/80 text-blue-700">
+              及格率: <span className="font-bold ml-1">{passRate}%</span>
+            </Badge>
+            <Badge variant="outline" className="shadow-sm border-red-300 bg-red-50/80 text-red-700">
+              差生率: <span className="font-bold ml-1">{poorRate}%</span>
+            </Badge>
           </div>
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-6">
-        {segmentGroups.map((group) => (
-          <div key={group.groupName} className={`rounded-lg p-4 ${groupBgColors[group.groupType]}`}>
-            <div className="font-semibold mb-3 flex items-center justify-between">
-              <span>【{group.groupName}】</span>
-              <span className="text-sm text-muted-foreground">
-                小计: {group.subtotal}人 ({group.subtotalPercentage}%)
+      <CardContent className="space-y-6 p-6">
+        {segmentGroups.map((group, groupIndex) => (
+          <div 
+            key={group.groupName} 
+            className={`rounded-lg p-5 ${groupBgColors[group.groupType]} border border-${group.groupType === 'excellent' ? 'green' : group.groupType === 'good' ? 'blue' : group.groupType === 'pass' ? 'yellow' : 'red'}-200/50 shadow-sm hover:shadow-md transition-all duration-300`}
+            style={{ animationDelay: `${groupIndex * 100}ms` }}
+          >
+            <div className="font-semibold mb-4 flex items-center justify-between">
+              <span className="text-lg">【{group.groupName}】</span>
+              <span className="text-sm text-muted-foreground bg-background/60 px-3 py-1 rounded-full">
+                小计: <span className="font-bold">{group.subtotal}</span>人 ({group.subtotalPercentage}%)
               </span>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {group.segments.map((segment, idx) => {
                 const widthPercent = (segment.studentCount / maxCount) * 100;
                 
                 return (
-                  <div key={idx} className="flex items-center gap-3">
-                    <div className="w-20 text-sm text-right flex-shrink-0">
+                  <div key={idx} className="flex items-center gap-3 hover:scale-[1.01] transition-transform">
+                    <div className="w-24 text-sm text-right flex-shrink-0 font-medium">
                       {segment.label}
                     </div>
-                    <div className="flex-1 bg-muted rounded h-6 overflow-hidden">
+                    <div className="flex-1 bg-background/60 rounded-full h-7 overflow-hidden shadow-inner">
                       <div 
-                        className={`h-full ${groupColors[group.groupType]} transition-all duration-300`}
+                        className={`h-full ${groupColors[group.groupType]} transition-all duration-500 ease-out rounded-full flex items-center justify-end pr-2`}
                         style={{ width: `${widthPercent}%` }}
-                      />
+                      >
+                        {widthPercent > 15 && (
+                          <span className="text-xs font-bold text-white/90">
+                            {segment.studentCount}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="w-32 text-sm flex-shrink-0 text-right">
-                      {segment.studentCount}人 ({segment.percentage}%)
+                    <div className="w-32 text-sm flex-shrink-0 text-right font-medium">
+                      <span className="font-bold">{segment.studentCount}</span>人 
+                      <span className="text-muted-foreground ml-1">({segment.percentage}%)</span>
                     </div>
                   </div>
                 );
