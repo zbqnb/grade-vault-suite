@@ -364,6 +364,16 @@ export type Database = {
           subject_name: string
         }[]
       }
+      get_class_total_score_averages: {
+        Args: { target_assessment_ids: number[] }
+        Returns: {
+          class_name: string
+          rank_in_grade: number
+          school_name: string
+          student_count: number
+          total_score_average: number
+        }[]
+      }
       get_dynamic_score_distribution:
         | {
             Args: {

@@ -1,1 +1,7 @@
 project_id = "qigzljnybrkyznckfown"
+
+[functions.get-class-averages]
+verify_jwt = false
+
+[functions.get-class-total-averages]
+verify_jwt = false
