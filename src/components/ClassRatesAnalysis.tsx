@@ -156,6 +156,40 @@ const ClassRatesAnalysis = () => {
     fetchAssessmentSubjects();
   }, [selectedAssessment]);
 
+  // 分页查询函数：获取所有成绩数据
+  const fetchAllScores = async (assessmentId: number, studentIds: number[]): Promise<{
+    student_id: number;
+    subject_id: number;
+    score_value: number;
+  }[]> => {
+    const PAGE_SIZE = 1000;
+    const allScores: { student_id: number; subject_id: number; score_value: number }[] = [];
+    let from = 0;
+    let hasMore = true;
+    
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from('individual_scores')
+        .select('student_id, subject_id, score_value')
+        .eq('assessment_id', assessmentId)
+        .in('student_id', studentIds)
+        .range(from, from + PAGE_SIZE - 1);
+      
+      if (error) throw error;
+      
+      if (data && data.length > 0) {
+        allScores.push(...data);
+        from += PAGE_SIZE;
+        hasMore = data.length === PAGE_SIZE;
+      } else {
+        hasMore = false;
+      }
+    }
+    
+    console.log(`分页查询完成，共获取 ${allScores.length} 条成绩记录`);
+    return allScores;
+  };
+
   const handleQuery = async () => {
     if (!selectedSchool || !selectedAssessment) {
       toast({ title: "请选择学校和考试", variant: "destructive" });
@@ -200,14 +234,8 @@ const ClassRatesAnalysis = () => {
       const studentIds = studentsData?.map(s => s.id) || [];
       const studentMap = new Map(studentsData?.map(s => [s.id, { name: s.name, classId: s.class_id }]) || []);
       
-      // Step 4: 获取该考试中这些学生的所有成绩（关键：只有有成绩的学生才算参考）
-      const { data: scoresData, error: scoresError } = await supabase
-        .from('individual_scores')
-        .select('student_id, subject_id, score_value')
-        .eq('assessment_id', selectedAssessment)
-        .in('student_id', studentIds);
-      
-      if (scoresError) throw scoresError;
+      // Step 4: 分页获取该考试中这些学生的所有成绩（关键：只有有成绩的学生才算参考）
+      const scoresData = await fetchAllScores(selectedAssessment, studentIds);
       
       // Step 5: 获取该考试中实际有成绩的科目（关键：只计算有成绩的科目）
       const actualExamSubjectIds = new Set<number>();
