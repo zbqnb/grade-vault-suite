@@ -182,6 +182,20 @@ const ClassRatesAnalysis = () => {
       
       const teacherMap = new Map(teachersData?.map(t => [t.id, t.name]) || []);
       
+      // Get all scores for this assessment first to find actual exam subjects
+      const { data: scoresData, error: scoresError } = await supabase
+        .from('individual_scores')
+        .select('student_id, subject_id, score_value')
+        .eq('assessment_id', selectedAssessment);
+      
+      if (scoresError) throw scoresError;
+      
+      // Get actual subjects that have scores in this exam
+      const actualExamSubjectIds = new Set<number>();
+      scoresData?.forEach(score => {
+        actualExamSubjectIds.add(score.subject_id);
+      });
+      
       // Get students for these classes
       const classIds = classesData?.map(c => c.id) || [];
       const { data: studentsData, error: studentError } = await supabase
@@ -192,14 +206,6 @@ const ClassRatesAnalysis = () => {
       if (studentError) throw studentError;
       
       const studentMap = new Map(studentsData?.map(s => [s.id, { name: s.name, classId: s.class_id }]) || []);
-      
-      // Get all scores for this assessment
-      const { data: scoresData, error: scoresError } = await supabase
-        .from('individual_scores')
-        .select('student_id, subject_id, score_value')
-        .eq('assessment_id', selectedAssessment);
-      
-      if (scoresError) throw scoresError;
       
       // Build student scores map
       const studentScores = new Map<number, StudentScore>();
@@ -235,25 +241,34 @@ const ClassRatesAnalysis = () => {
         student.totalScore = total;
       });
       
-      // Calculate thresholds
+      // Calculate thresholds - only for subjects that actually have scores
       const subjectThresholds = new Map<number, { excellent: number; pass: number; poor: number }>();
       assessmentSubjects.forEach(as => {
-        subjectThresholds.set(as.subject_id, {
-          excellent: as.full_score * (as.excellent_threshold / 100),
-          pass: as.full_score * (as.pass_threshold / 100),
-          poor: as.full_score * (as.poor_threshold / 100),
-        });
+        if (actualExamSubjectIds.has(as.subject_id)) {
+          subjectThresholds.set(as.subject_id, {
+            excellent: as.full_score * (as.excellent_threshold / 100),
+            pass: as.full_score * (as.pass_threshold / 100),
+            poor: as.full_score * (as.poor_threshold / 100),
+          });
+        }
       });
       
-      // Calculate total score thresholds
+      // Calculate total score thresholds - only for actual exam subjects
       let totalExcellentThreshold = 0;
       let totalPassThreshold = 0;
       let totalPoorThreshold = 0;
+      let totalFullScore = 0;
       assessmentSubjects.forEach(as => {
-        totalExcellentThreshold += as.full_score * (as.excellent_threshold / 100);
-        totalPassThreshold += as.full_score * (as.pass_threshold / 100);
-        totalPoorThreshold += as.full_score * (as.poor_threshold / 100);
+        if (actualExamSubjectIds.has(as.subject_id)) {
+          totalExcellentThreshold += as.full_score * (as.excellent_threshold / 100);
+          totalPassThreshold += as.full_score * (as.pass_threshold / 100);
+          totalPoorThreshold += as.full_score * (as.poor_threshold / 100);
+          totalFullScore += as.full_score;
+        }
       });
+      
+      console.log('Actual exam subjects:', Array.from(actualExamSubjectIds));
+      console.log('Total thresholds - Excellent:', totalExcellentThreshold, 'Pass:', totalPassThreshold, 'Poor:', totalPoorThreshold, 'Full:', totalFullScore);
       
       // Group by class and calculate rates
       const classDataMap = new Map<number, {
