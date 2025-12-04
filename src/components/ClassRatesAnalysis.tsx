@@ -182,11 +182,23 @@ const ClassRatesAnalysis = () => {
       
       const teacherMap = new Map(teachersData?.map(t => [t.id, t.name]) || []);
       
-      // Get all scores for this assessment first to find actual exam subjects
+      // Get students for these classes first
+      const classIds = classesData?.map(c => c.id) || [];
+      const { data: studentsData, error: studentError } = await supabase
+        .from('students')
+        .select('id, name, class_id')
+        .in('class_id', classIds);
+      
+      if (studentError) throw studentError;
+      
+      const studentIds = studentsData?.map(s => s.id) || [];
+      
+      // Get all scores for this assessment and school
       const { data: scoresData, error: scoresError } = await supabase
         .from('individual_scores')
         .select('student_id, subject_id, score_value')
-        .eq('assessment_id', selectedAssessment);
+        .eq('assessment_id', selectedAssessment)
+        .in('student_id', studentIds);
       
       if (scoresError) throw scoresError;
       
@@ -196,23 +208,18 @@ const ClassRatesAnalysis = () => {
         actualExamSubjectIds.add(score.subject_id);
       });
       
-      // Get students for these classes
-      const classIds = classesData?.map(c => c.id) || [];
-      const { data: studentsData, error: studentError } = await supabase
-        .from('students')
-        .select('id, name, class_id')
-        .in('class_id', classIds);
-      
-      if (studentError) throw studentError;
-      
       const studentMap = new Map(studentsData?.map(s => [s.id, { name: s.name, classId: s.class_id }]) || []);
       
       // Build student scores map
       const studentScores = new Map<number, StudentScore>();
+      const missingStudents: number[] = [];
       
       scoresData?.forEach(score => {
         const studentInfo = studentMap.get(score.student_id);
-        if (!studentInfo) return;
+        if (!studentInfo) {
+          missingStudents.push(score.student_id);
+          return;
+        }
         
         const classInfo = classesData?.find(c => c.id === studentInfo.classId);
         if (!classInfo) return;
@@ -253,12 +260,13 @@ const ClassRatesAnalysis = () => {
         }
       });
       
-      // Calculate total score thresholds - only for actual exam subjects
+      // Calculate total score thresholds - only for subjects that actually have scores in this exam
       let totalExcellentThreshold = 0;
       let totalPassThreshold = 0;
       let totalPoorThreshold = 0;
       let totalFullScore = 0;
       assessmentSubjects.forEach(as => {
+        // Only include subjects that have actual scores in this exam
         if (actualExamSubjectIds.has(as.subject_id)) {
           totalExcellentThreshold += as.full_score * (as.excellent_threshold / 100);
           totalPassThreshold += as.full_score * (as.pass_threshold / 100);
@@ -267,8 +275,27 @@ const ClassRatesAnalysis = () => {
         }
       });
       
+      console.log('=== DEBUG INFO ===');
       console.log('Actual exam subjects:', Array.from(actualExamSubjectIds));
+      console.log('Assessment subjects config:', assessmentSubjects);
       console.log('Total thresholds - Excellent:', totalExcellentThreshold, 'Pass:', totalPassThreshold, 'Poor:', totalPoorThreshold, 'Full:', totalFullScore);
+      console.log('Total scores data count:', scoresData?.length);
+      console.log('Student map size:', studentMap.size);
+      console.log('Student scores map size:', studentScores.size);
+      console.log('Missing students (not found in studentMap):', missingStudents.length, missingStudents);
+      
+      // Log sample student scores for verification
+      let sampleCount = 0;
+      studentScores.forEach((student, studentId) => {
+        if (sampleCount < 3) {
+          console.log(`Student ${student.studentName} (ID: ${studentId}):`, {
+            totalScore: student.totalScore,
+            scores: Array.from(student.scores.entries()),
+            isExcellent: student.totalScore >= totalExcellentThreshold
+          });
+          sampleCount++;
+        }
+      });
       
       // Group by class and calculate rates
       const classDataMap = new Map<number, {
