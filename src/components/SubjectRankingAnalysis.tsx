@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Check, ChevronsUpDown, TrendingUp, TrendingDown, Minus, AlertCircle, Loader2, X } from "lucide-react";
-import { getClassSubjectAverages } from "@/utils/supabaseQuery";
+import { getClassSubjectAverages, getClassTotalScoreAverages } from "@/utils/supabaseQuery";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -214,17 +214,31 @@ const SubjectRankingAnalysis = () => {
           }
         });
         
+        // 获取班级总分平均分数据
+        const totalScoreData = await getClassTotalScoreAverages([selectedAssessment]);
+        
+        // 创建班级总分平均分映射
+        const totalScoreMap = new Map<string, { avgScore: number; rank: number; studentCount: number }>();
+        totalScoreData.forEach((item: any) => {
+          const key = `${item.school_name}_${item.class_name}`;
+          totalScoreMap.set(key, {
+            avgScore: item.total_score_average,
+            rank: item.rank_in_grade,
+            studentCount: item.student_count
+          });
+        });
+        
         const rankings: ClassRankingData[] = [];
         classMap.forEach((classData) => {
-          const subjectScores = Array.from(classData.subjects.values());
-          const classAvg = subjectScores.reduce((sum, s) => sum + s.score, 0) / subjectScores.length;
+          const classKey = `${classData.schoolName}_${classData.className}`;
+          const totalScoreInfo = totalScoreMap.get(classKey);
           
           rankings.push({
             schoolName: classData.schoolName,
             className: classData.className,
             classId: classData.classId,
-            classAverageScore: Math.round(classAvg * 100) / 100,
-            classRank: 0,
+            classAverageScore: totalScoreInfo?.avgScore || 0,
+            classRank: totalScoreInfo?.rank || 0,
             totalClasses: classMap.size,
             subjectRankings: [],
             problemSubjectCount: 0,
@@ -232,10 +246,8 @@ const SubjectRankingAnalysis = () => {
           });
         });
         
+        // 按总分平均分排序
         rankings.sort((a, b) => b.classAverageScore - a.classAverageScore);
-        rankings.forEach((r, idx) => {
-          r.classRank = idx + 1;
-        });
         
         const subjectRankings = new Map<string, Array<{
           classKey: string;
