@@ -165,7 +165,8 @@ const ClassRatesAnalysis = () => {
     setLoading(true);
     
     try {
-      // Get classes for this school
+      // 按照SQL逻辑：通过JOIN获取参加考试的学生及其总分
+      // Step 1: 获取该学校的所有班级
       const { data: classesData, error: classError } = await supabase
         .from('classes')
         .select('id, name, homeroom_teacher_id')
@@ -173,7 +174,13 @@ const ClassRatesAnalysis = () => {
       
       if (classError) throw classError;
       
-      // Get homeroom teachers
+      const classIds = classesData?.map(c => c.id) || [];
+      if (classIds.length === 0) {
+        setClassRates([]);
+        return;
+      }
+      
+      // Step 2: 获取班主任信息
       const teacherIds = classesData?.map(c => c.homeroom_teacher_id).filter(Boolean) || [];
       const { data: teachersData } = await supabase
         .from('teachers')
@@ -182,8 +189,7 @@ const ClassRatesAnalysis = () => {
       
       const teacherMap = new Map(teachersData?.map(t => [t.id, t.name]) || []);
       
-      // Get students for these classes first
-      const classIds = classesData?.map(c => c.id) || [];
+      // Step 3: 获取这些班级的学生
       const { data: studentsData, error: studentError } = await supabase
         .from('students')
         .select('id, name, class_id')
@@ -192,8 +198,9 @@ const ClassRatesAnalysis = () => {
       if (studentError) throw studentError;
       
       const studentIds = studentsData?.map(s => s.id) || [];
+      const studentMap = new Map(studentsData?.map(s => [s.id, { name: s.name, classId: s.class_id }]) || []);
       
-      // Get all scores for this assessment and school
+      // Step 4: 获取该考试中这些学生的所有成绩（关键：只有有成绩的学生才算参考）
       const { data: scoresData, error: scoresError } = await supabase
         .from('individual_scores')
         .select('student_id, subject_id, score_value')
@@ -202,45 +209,72 @@ const ClassRatesAnalysis = () => {
       
       if (scoresError) throw scoresError;
       
-      // Get actual subjects that have scores in this exam
+      // Step 5: 获取该考试中实际有成绩的科目（关键：只计算有成绩的科目）
       const actualExamSubjectIds = new Set<number>();
       scoresData?.forEach(score => {
         actualExamSubjectIds.add(score.subject_id);
       });
       
-      const studentMap = new Map(studentsData?.map(s => [s.id, { name: s.name, classId: s.class_id }]) || []);
+      console.log('实际考试科目:', Array.from(actualExamSubjectIds));
       
-      // Build student scores map
-      const studentScores = new Map<number, StudentScore>();
-      const missingStudents: number[] = [];
+      // Step 6: 计算阈值 - 只包含实际有成绩的科目
+      const subjectThresholds = new Map<number, { excellent: number; pass: number; poor: number; full: number }>();
+      let totalExcellentThreshold = 0;
+      let totalPassThreshold = 0;
+      let totalPoorThreshold = 0;
+      let totalFullScore = 0;
+      
+      assessmentSubjects.forEach(as => {
+        if (actualExamSubjectIds.has(as.subject_id)) {
+          const excellent = as.full_score * (as.excellent_threshold / 100);
+          const pass = as.full_score * (as.pass_threshold / 100);
+          const poor = as.full_score * (as.poor_threshold / 100);
+          
+          subjectThresholds.set(as.subject_id, {
+            excellent,
+            pass,
+            poor,
+            full: as.full_score,
+          });
+          
+          totalExcellentThreshold += excellent;
+          totalPassThreshold += pass;
+          totalPoorThreshold += poor;
+          totalFullScore += as.full_score;
+        }
+      });
+      
+      console.log('总分阈值 - 满分:', totalFullScore, '优秀线:', totalExcellentThreshold, '及格线:', totalPassThreshold, '差生线:', totalPoorThreshold);
+      
+      // Step 7: 构建学生成绩Map（只包含有成绩的学生）
+      const studentScoresMap = new Map<number, {
+        studentId: number;
+        studentName: string;
+        classId: number;
+        scores: Map<number, number>;
+        totalScore: number;
+      }>();
       
       scoresData?.forEach(score => {
         const studentInfo = studentMap.get(score.student_id);
-        if (!studentInfo) {
-          missingStudents.push(score.student_id);
-          return;
-        }
+        if (!studentInfo) return;
         
-        const classInfo = classesData?.find(c => c.id === studentInfo.classId);
-        if (!classInfo) return;
-        
-        if (!studentScores.has(score.student_id)) {
-          studentScores.set(score.student_id, {
+        if (!studentScoresMap.has(score.student_id)) {
+          studentScoresMap.set(score.student_id, {
             studentId: score.student_id,
             studentName: studentInfo.name,
-            className: classInfo.name,
             classId: studentInfo.classId,
             scores: new Map(),
             totalScore: 0,
           });
         }
         
-        const student = studentScores.get(score.student_id)!;
+        const student = studentScoresMap.get(score.student_id)!;
         student.scores.set(score.subject_id, score.score_value);
       });
       
-      // Calculate total scores
-      studentScores.forEach(student => {
+      // 计算每个学生的总分
+      studentScoresMap.forEach(student => {
         let total = 0;
         student.scores.forEach(score => {
           total += score;
@@ -248,85 +282,43 @@ const ClassRatesAnalysis = () => {
         student.totalScore = total;
       });
       
-      // Calculate thresholds - only for subjects that actually have scores
-      const subjectThresholds = new Map<number, { excellent: number; pass: number; poor: number }>();
-      assessmentSubjects.forEach(as => {
-        if (actualExamSubjectIds.has(as.subject_id)) {
-          subjectThresholds.set(as.subject_id, {
-            excellent: as.full_score * (as.excellent_threshold / 100),
-            pass: as.full_score * (as.pass_threshold / 100),
-            poor: as.full_score * (as.poor_threshold / 100),
-          });
+      // Step 8: 按班级分组（只包含有成绩的学生）
+      const classStudentsMap = new Map<number, typeof studentScoresMap extends Map<number, infer V> ? V[] : never>();
+      
+      studentScoresMap.forEach(student => {
+        if (!classStudentsMap.has(student.classId)) {
+          classStudentsMap.set(student.classId, []);
         }
+        classStudentsMap.get(student.classId)!.push(student);
       });
       
-      // Calculate total score thresholds - only for subjects that actually have scores in this exam
-      let totalExcellentThreshold = 0;
-      let totalPassThreshold = 0;
-      let totalPoorThreshold = 0;
-      let totalFullScore = 0;
-      assessmentSubjects.forEach(as => {
-        // Only include subjects that have actual scores in this exam
-        if (actualExamSubjectIds.has(as.subject_id)) {
-          totalExcellentThreshold += as.full_score * (as.excellent_threshold / 100);
-          totalPassThreshold += as.full_score * (as.pass_threshold / 100);
-          totalPoorThreshold += as.full_score * (as.poor_threshold / 100);
-          totalFullScore += as.full_score;
-        }
-      });
-      
-      console.log('=== DEBUG INFO ===');
-      console.log('Actual exam subjects:', Array.from(actualExamSubjectIds));
-      console.log('Assessment subjects config:', assessmentSubjects);
-      console.log('Total thresholds - Excellent:', totalExcellentThreshold, 'Pass:', totalPassThreshold, 'Poor:', totalPoorThreshold, 'Full:', totalFullScore);
-      console.log('Total scores data count:', scoresData?.length);
-      console.log('Student map size:', studentMap.size);
-      console.log('Student scores map size:', studentScores.size);
-      console.log('Missing students (not found in studentMap):', missingStudents.length, missingStudents);
-      
-      // Log sample student scores for verification
-      let sampleCount = 0;
-      studentScores.forEach((student, studentId) => {
-        if (sampleCount < 3) {
-          console.log(`Student ${student.studentName} (ID: ${studentId}):`, {
-            totalScore: student.totalScore,
-            scores: Array.from(student.scores.entries()),
-            isExcellent: student.totalScore >= totalExcellentThreshold
-          });
-          sampleCount++;
-        }
-      });
-      
-      // Group by class and calculate rates
-      const classDataMap = new Map<number, {
-        students: StudentScore[];
-        className: string;
-        homeroomTeacher: string;
-      }>();
-      
-      studentScores.forEach(student => {
-        if (!classDataMap.has(student.classId)) {
-          const classInfo = classesData?.find(c => c.id === student.classId);
-          classDataMap.set(student.classId, {
-            students: [],
-            className: classInfo?.name || '',
-            homeroomTeacher: classInfo?.homeroom_teacher_id 
-              ? teacherMap.get(classInfo.homeroom_teacher_id) || '未分配'
-              : '未分配',
-          });
-        }
-        classDataMap.get(student.classId)!.students.push(student);
-      });
-      
-      // Calculate rates for each class
+      // Step 9: 计算每个班级的三率
       const results: ClassRateData[] = [];
       const isTotal = selectedSubject === 'total';
       const subjectId = isTotal ? null : parseInt(selectedSubject);
       
-      classDataMap.forEach((classData, classId) => {
-        const students = classData.students;
-        const count = students.length;
-        if (count === 0) return;
+      classesData?.forEach(classInfo => {
+        const students = classStudentsMap.get(classInfo.id) || [];
+        const count = students.length; // 参考人数 = 有成绩的学生数
+        
+        if (count === 0) {
+          // 没有参考学生也显示
+          results.push({
+            classId: classInfo.id,
+            className: classInfo.name,
+            homeroomTeacher: classInfo.homeroom_teacher_id 
+              ? teacherMap.get(classInfo.homeroom_teacher_id) || '未分配'
+              : '未分配',
+            studentCount: 0,
+            averageScore: 0,
+            excellentRate: 0,
+            excellentCount: 0,
+            excellentStudents: [],
+            passRate: 0,
+            poorRate: 0,
+          });
+          return;
+        }
         
         let totalSum = 0;
         let excellentCount = 0;
@@ -336,35 +328,38 @@ const ClassRatesAnalysis = () => {
         
         students.forEach(student => {
           let score: number;
-          let isExcellent: boolean;
-          let isPass: boolean;
-          let isPoor: boolean;
+          let threshold: { excellent: number; pass: number; poor: number } | undefined;
           
           if (isTotal) {
             score = student.totalScore;
-            isExcellent = score >= totalExcellentThreshold;
-            isPass = score >= totalPassThreshold;
-            isPoor = score < totalPoorThreshold;
+            threshold = {
+              excellent: totalExcellentThreshold,
+              pass: totalPassThreshold,
+              poor: totalPoorThreshold,
+            };
           } else {
             score = student.scores.get(subjectId!) || 0;
-            const thresholds = subjectThresholds.get(subjectId!);
-            isExcellent = thresholds ? score >= thresholds.excellent : false;
-            isPass = thresholds ? score >= thresholds.pass : false;
-            isPoor = thresholds ? score < thresholds.poor : false;
+            threshold = subjectThresholds.get(subjectId!);
           }
           
           totalSum += score;
+          
+          const isExcellent = threshold ? score >= threshold.excellent : false;
+          const isPass = threshold ? score >= threshold.pass : false;
+          const isPoor = threshold ? score < threshold.poor : false;
+          
           if (isExcellent) {
             excellentCount++;
-            // Build excellent student info
+            // 构建优秀学生详情
             const studentScoresList: ExcellentStudent['scores'] = [];
             subjects.forEach(sub => {
-              const subScore = student.scores.get(sub.id) || 0;
-              studentScoresList.push({
-                subjectName: sub.name,
-                score: subScore,
-                isCurrentSubject: !isTotal && sub.id === subjectId,
-              });
+              if (student.scores.has(sub.id)) {
+                studentScoresList.push({
+                  subjectName: sub.name,
+                  score: student.scores.get(sub.id) || 0,
+                  isCurrentSubject: !isTotal && sub.id === subjectId,
+                });
+              }
             });
             excellentStudents.push({
               studentId: student.studentId,
@@ -377,9 +372,11 @@ const ClassRatesAnalysis = () => {
         });
         
         results.push({
-          classId,
-          className: classData.className,
-          homeroomTeacher: classData.homeroomTeacher,
+          classId: classInfo.id,
+          className: classInfo.name,
+          homeroomTeacher: classInfo.homeroom_teacher_id 
+            ? teacherMap.get(classInfo.homeroom_teacher_id) || '未分配'
+            : '未分配',
           studentCount: count,
           averageScore: Math.round((totalSum / count) * 100) / 100,
           excellentRate: Math.round((excellentCount / count) * 10000) / 100,
@@ -390,7 +387,7 @@ const ClassRatesAnalysis = () => {
         });
       });
       
-      // Sort by class name
+      // 按班级名称排序
       results.sort((a, b) => {
         const numA = parseInt(a.className.match(/\d+/)?.[0] || '0');
         const numB = parseInt(b.className.match(/\d+/)?.[0] || '0');
