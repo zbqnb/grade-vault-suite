@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { BarChart3, TrendingUp, Users, FileText, Award, Target, Home } from "lucide-react";
+import { BarChart3, TrendingUp, Users, FileText, Award, Target, Home, Percent } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import SubjectRankingAnalysis from "@/components/SubjectRankingAnalysis";
 import ScoreDistribution from "./ScoreDistribution";
+import ClassRatesAnalysis from "@/components/ClassRatesAnalysis";
 import { useNavigate } from "react-router-dom";
 
 const Analytics = () => {
@@ -23,9 +24,9 @@ const Analytics = () => {
       icon: TrendingUp,
     },
     {
-      id: "class-comparison",
-      title: "班级对比分析",
-      icon: Users,
+      id: "class-rates",
+      title: "各班一分三率分析",
+      icon: Percent,
     },
     {
       id: "student-performance",
@@ -50,24 +51,8 @@ const Analytics = () => {
         return <SubjectRankingAnalysis />;
       case "score-distribution":
         return <ScoreDistribution />;
-      case "class-comparison":
-        return (
-          <div className="space-y-6 animate-fade-in">
-            <div>
-              <h2 className="text-2xl font-bold">班级对比分析</h2>
-              <p className="text-muted-foreground mt-2">
-                对比不同班级之间的整体表现
-              </p>
-            </div>
-            <Card className="shadow-lg">
-              <CardContent className="pt-6">
-                <div className="text-center py-12 text-muted-foreground">
-                  功能开发中...
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        );
+      case "class-rates":
+        return <ClassRatesAnalysis />;
       case "student-performance":
         return (
           <div className="space-y-6 animate-fade-in">
