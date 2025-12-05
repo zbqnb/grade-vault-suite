@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { Upload as UploadIcon, FileText, Users, BookOpen, BarChart3, Settings } from "lucide-react";
+import { useState, useMemo, useRef } from "react";
+import { Upload as UploadIcon, Users, BarChart3, Settings } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -8,8 +8,10 @@ import { FileUpload } from "@/components/ui/file-upload";
 import { useExcelParser } from "@/hooks/useExcelParser";
 import { useToast } from "@/hooks/use-toast";
 import { AssessmentConfigDialog } from "@/components/AssessmentConfigDialog";
+import { UploadHistory, UploadHistoryRef } from "@/components/UploadHistory";
 
 const Upload = () => {
+  const uploadHistoryRef = useRef<UploadHistoryRef>(null);
   const [selectedGrade, setSelectedGrade] = useState("");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedType, setSelectedType] = useState("");
@@ -79,6 +81,8 @@ const Upload = () => {
       if (result?.assessmentIds && result.assessmentIds.length > 0) {
         setCurrentAssessmentIds(result.assessmentIds);
         setShowConfigDialog(true);
+        // 刷新上传历史
+        uploadHistoryRef.current?.refresh();
       }
       
       // 重置表单
@@ -232,31 +236,7 @@ const Upload = () => {
             )}
 
             {/* Upload History */}
-            <Card className="mt-6">
-              <CardHeader>
-                <CardTitle className="text-lg">最近上传</CardTitle>
-                <CardDescription>查看最近的上传记录</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {[1, 2, 3].map((item) => (
-                    <div key={item} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <FileText className="h-8 w-8 text-primary" />
-                        <div>
-                          <p className="font-medium">高一年级期中考试成绩.xlsx</p>
-                          <p className="text-sm text-muted-foreground">2024-03-15 14:30</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-medium text-accent">上传成功</p>
-                        <p className="text-sm text-muted-foreground">456条记录</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            <UploadHistory ref={uploadHistoryRef} />
           </div>
 
           {/* Sidebar */}
