@@ -55,6 +55,7 @@ interface ClassRateData {
   classId: number;
   className: string;
   homeroomTeacher: string;
+  subjectTeacher: string;
   studentCount: number;
   averageScore: number;
   excellentRate: number;
@@ -214,14 +215,27 @@ const ClassRatesAnalysis = () => {
         return;
       }
       
-      // Step 2: 获取班主任信息
-      const teacherIds = classesData?.map(c => c.homeroom_teacher_id).filter(Boolean) || [];
+      // Step 2: 获取所有老师信息
       const { data: teachersData } = await supabase
         .from('teachers')
         .select('id, name')
-        .in('id', teacherIds);
+        .eq('school_id', selectedSchool);
       
       const teacherMap = new Map(teachersData?.map(t => [t.id, t.name]) || []);
+      
+      // Step 2.5: 获取课程分配信息（班级-科目-老师对应关系）
+      const { data: courseAssignmentsData } = await supabase
+        .from('course_assignments')
+        .select('class_id, subject_id, teacher_id')
+        .in('class_id', classIds);
+      
+      // 构建班级-科目 -> 老师名称的映射
+      const courseTeacherMap = new Map<string, string>();
+      courseAssignmentsData?.forEach(ca => {
+        const key = `${ca.class_id}-${ca.subject_id}`;
+        const teacherName = teacherMap.get(ca.teacher_id) || '';
+        courseTeacherMap.set(key, teacherName);
+      });
       
       // Step 3: 获取这些班级的学生
       const { data: studentsData, error: studentError } = await supabase
@@ -325,6 +339,13 @@ const ClassRatesAnalysis = () => {
       const isTotal = selectedSubject === 'total';
       const subjectId = isTotal ? null : parseInt(selectedSubject);
       
+      // 获取任课老师名称的辅助函数
+      const getSubjectTeacher = (classId: number): string => {
+        if (isTotal) return '-';
+        const key = `${classId}-${subjectId}`;
+        return courseTeacherMap.get(key) || '未分配';
+      };
+      
       classesData?.forEach(classInfo => {
         const students = classStudentsMap.get(classInfo.id) || [];
         const count = students.length; // 参考人数 = 有成绩的学生数
@@ -337,6 +358,7 @@ const ClassRatesAnalysis = () => {
             homeroomTeacher: classInfo.homeroom_teacher_id 
               ? teacherMap.get(classInfo.homeroom_teacher_id) || '未分配'
               : '未分配',
+            subjectTeacher: getSubjectTeacher(classInfo.id),
             studentCount: 0,
             averageScore: 0,
             excellentRate: 0,
@@ -405,6 +427,7 @@ const ClassRatesAnalysis = () => {
           homeroomTeacher: classInfo.homeroom_teacher_id 
             ? teacherMap.get(classInfo.homeroom_teacher_id) || '未分配'
             : '未分配',
+          subjectTeacher: getSubjectTeacher(classInfo.id),
           studentCount: count,
           averageScore: Math.round((totalSum / count) * 100) / 100,
           excellentRate: Math.round((excellentCount / count) * 10000) / 100,
@@ -568,6 +591,7 @@ const ClassRatesAnalysis = () => {
                     <TableRow className="bg-muted/30">
                       <TableHead className="font-semibold">班级</TableHead>
                       <TableHead className="font-semibold">班主任</TableHead>
+                      <TableHead className="font-semibold">任课老师</TableHead>
                       <TableHead className="font-semibold text-center">参考人数</TableHead>
                       <TableHead className="font-semibold text-center">平均分</TableHead>
                       <TableHead className="font-semibold text-center">优秀率</TableHead>
@@ -581,6 +605,7 @@ const ClassRatesAnalysis = () => {
                       <TableRow key={classRate.classId} className="hover:bg-muted/20 transition-colors">
                         <TableCell className="font-medium">{classRate.className}</TableCell>
                         <TableCell>{classRate.homeroomTeacher}</TableCell>
+                        <TableCell>{classRate.subjectTeacher}</TableCell>
                         <TableCell className="text-center">{classRate.studentCount}</TableCell>
                         <TableCell className="text-center font-medium">{classRate.averageScore}</TableCell>
                         <TableCell className="text-center">
