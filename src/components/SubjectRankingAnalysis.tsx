@@ -6,15 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Check, ChevronsUpDown, TrendingUp, TrendingDown, Minus, AlertCircle, Loader2, X } from "lucide-react";
+import { Check, ChevronsUpDown, TrendingUp, TrendingDown, Minus, AlertCircle, Loader2, X, Award, Star } from "lucide-react";
 import { getClassSubjectAverages, getClassTotalScoreAverages } from "@/utils/supabaseQuery";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-
-interface School {
-  id: number;
-  name: string;
-}
 
 interface Assessment {
   id: number;
@@ -22,6 +17,17 @@ interface Assessment {
   month: number;
   type: string;
   grade_level: string;
+  school_id: number;
+}
+
+interface ExamGroup {
+  key: string;
+  academic_year: string;
+  month: number;
+  type: string;
+  grade_level: string;
+  assessmentIds: number[];
+  schoolNames: string[];
 }
 
 interface Subject {
@@ -37,6 +43,7 @@ interface SubjectRanking {
   status: 'excellent' | 'medium' | 'poor';
   averageScore: number;
   teacherName?: string;
+  totalClassCount: number;
 }
 
 interface ClassRankingData {
@@ -47,65 +54,70 @@ interface ClassRankingData {
   classRank: number;
   totalClasses: number;
   subjectRankings: SubjectRanking[];
-  problemSubjectCount: number;
+  excellentSubjectCount: number;
   homeroomTeacherName?: string;
 }
 
-type SortOption = 'avgDesc' | 'avgAsc' | 'problemDesc';
+type SortOption = 'avgDesc' | 'avgAsc' | 'excellentDesc';
 
 const SubjectRankingAnalysis = () => {
   const { toast } = useToast();
   
-  const [schools, setSchools] = useState<School[]>([]);
-  const [selectedSchool, setSelectedSchool] = useState<number | null>(null);
-  const [assessments, setAssessments] = useState<Assessment[]>([]);
-  const [selectedAssessment, setSelectedAssessment] = useState<number | null>(null);
-  const [gradeLevel, setGradeLevel] = useState<string>("");
+  const [exams, setExams] = useState<ExamGroup[]>([]);
+  const [selectedExam, setSelectedExam] = useState<string | null>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [selectedSubjects, setSelectedSubjects] = useState<Set<string>>(new Set());
-  const [sortOption, setSortOption] = useState<SortOption>('avgDesc');
+  const [sortOption, setSortOption] = useState<SortOption>('excellentDesc');
   
   const [classRankings, setClassRankings] = useState<ClassRankingData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 加载学校列表
+  // 加载考试列表（按学年、月份、类型、年级分组）
   useEffect(() => {
-    const fetchSchools = async () => {
-      const { data, error } = await supabase.from('schools').select('id, name').order('id');
-      if (error) {
-        toast({ title: "加载学校失败", description: error.message, variant: "destructive" });
-      } else if (data && data.length > 0) {
-        setSchools(data);
-        setSelectedSchool(data[0].id);
-      }
-    };
-    fetchSchools();
-  }, []);
-
-  // 加载考试列表
-  useEffect(() => {
-    if (!selectedSchool) return;
-    
-    const fetchAssessments = async () => {
-      const { data, error } = await supabase
+    const fetchExams = async () => {
+      const { data: assessmentsData, error: assessmentError } = await supabase
         .from('assessments')
-        .select('*')
-        .eq('school_id', selectedSchool)
+        .select('id, academic_year, month, type, grade_level, school_id, schools(name)')
         .order('academic_year', { ascending: false })
         .order('month', { ascending: false });
       
-      if (error) {
-        toast({ title: "加载考试失败", description: error.message, variant: "destructive" });
-      } else if (data && data.length > 0) {
-        setAssessments(data);
-        setSelectedAssessment(data[0].id);
-        setGradeLevel(data[0].grade_level);
+      if (assessmentError) {
+        toast({ title: "加载考试失败", description: assessmentError.message, variant: "destructive" });
+        return;
+      }
+      
+      // 按考试分组
+      const examMap = new Map<string, ExamGroup>();
+      assessmentsData?.forEach((a: any) => {
+        const key = `${a.academic_year}_${a.month}_${a.type}_${a.grade_level}`;
+        if (!examMap.has(key)) {
+          examMap.set(key, {
+            key,
+            academic_year: a.academic_year,
+            month: a.month,
+            type: a.type,
+            grade_level: a.grade_level,
+            assessmentIds: [],
+            schoolNames: [],
+          });
+        }
+        const exam = examMap.get(key)!;
+        exam.assessmentIds.push(a.id);
+        if (a.schools?.name && !exam.schoolNames.includes(a.schools.name)) {
+          exam.schoolNames.push(a.schools.name);
+        }
+      });
+      
+      const examList = Array.from(examMap.values());
+      setExams(examList);
+      if (examList.length > 0) {
+        setSelectedExam(examList[0].key);
       }
     };
     
-    fetchAssessments();
-  }, [selectedSchool]);
+    fetchExams();
+  }, []);
 
   // 加载科目列表
   useEffect(() => {
@@ -123,33 +135,55 @@ const SubjectRankingAnalysis = () => {
 
   // 加载排名数据
   useEffect(() => {
-    if (!selectedAssessment || !selectedSchool) return;
+    if (!selectedExam) return;
+    
+    const selectedExamData = exams.find(e => e.key === selectedExam);
+    if (!selectedExamData) return;
     
     const fetchRankingData = async () => {
       setLoading(true);
       setError(null);
       
       try {
-        const data = await getClassSubjectAverages([selectedAssessment]);
+        // 获取所有学校的各科平均分（跨学校排名）
+        const data = await getClassSubjectAverages(selectedExamData.assessmentIds);
         
-        const schoolName = schools.find(s => s.id === selectedSchool)?.name || '';
-        
-        const filteredData = data.filter((item: any) => item.school_name === schoolName);
-        
+        // 收集所有班级信息
         const classNamesSet = new Set<string>();
-        filteredData.forEach((item: any) => classNamesSet.add(item.class_name));
-        const classNames = Array.from(classNamesSet);
+        const schoolNamesSet = new Set<string>();
+        data.forEach((item: any) => {
+          classNamesSet.add(item.class_name);
+          schoolNamesSet.add(item.school_name);
+        });
         
+        // 获取学校ID映射
+        const { data: schoolsData } = await supabase
+          .from('schools')
+          .select('id, name')
+          .in('name', Array.from(schoolNamesSet));
+        
+        const schoolIdMap = new Map(schoolsData?.map(s => [s.name, s.id]) || []);
+        
+        // 获取班级信息
         const { data: classesData, error: classError } = await supabase
           .from('classes')
-          .select('id, name, homeroom_teacher_id')
-          .eq('school_id', selectedSchool)
-          .in('name', classNames);
+          .select('id, name, homeroom_teacher_id, school_id');
         
         if (classError) {
           throw new Error(`查询班级失败: ${classError.message}`);
         }
         
+        // 按学校和班级名称创建映射
+        const classInfoMap = new Map<string, { id: number; homeroomTeacherId: number | null }>();
+        classesData?.forEach(c => {
+          const schoolName = schoolsData?.find(s => s.id === c.school_id)?.name;
+          if (schoolName) {
+            const key = `${schoolName}_${c.name}`;
+            classInfoMap.set(key, { id: c.id, homeroomTeacherId: c.homeroom_teacher_id });
+          }
+        });
+        
+        // 获取班主任信息
         const homeroomTeacherIds = classesData?.map(c => c.homeroom_teacher_id).filter(Boolean) || [];
         const { data: homeroomTeachers } = await supabase
           .from('teachers')
@@ -158,17 +192,18 @@ const SubjectRankingAnalysis = () => {
         
         const homeroomTeacherMap = new Map(homeroomTeachers?.map(t => [t.id, t.name]) || []);
         
+        // 获取科目ID映射
         const { data: subjectsData } = await supabase
           .from('subjects')
           .select('id, name');
         
         const subjectIdMap = new Map(subjectsData?.map(s => [s.name, s.id]) || []);
         
-        const selectedAssessmentData = assessments.find(a => a.id === selectedAssessment);
+        // 获取课程分配（任课教师）
         const { data: courseAssignments } = await supabase
           .from('course_assignments')
           .select('class_id, subject_id, teacher_id, teachers(name)')
-          .eq('academic_year', selectedAssessmentData?.academic_year || '');
+          .eq('academic_year', selectedExamData.academic_year);
         
         const subjectTeacherMap = new Map<string, string>();
         courseAssignments?.forEach((ca: any) => {
@@ -176,25 +211,26 @@ const SubjectRankingAnalysis = () => {
           subjectTeacherMap.set(key, ca.teachers?.name || '未分配');
         });
         
+        // 构建班级数据
         const classMap = new Map<string, { 
           schoolName: string; 
           className: string; 
           classId: number;
           homeroomTeacherName?: string;
-          subjects: Map<string, { score: number; teacherName?: string }>;
+          subjects: Map<string, { score: number; rank: number; teacherName?: string }>;
         }>();
         
-        filteredData.forEach((item: any) => {
+        data.forEach((item: any) => {
           const classKey = `${item.school_name}_${item.class_name}`;
-          const classInfo = classesData?.find(c => c.name === item.class_name);
+          const classInfo = classInfoMap.get(classKey);
           
           if (!classMap.has(classKey)) {
             classMap.set(classKey, {
               schoolName: item.school_name,
               className: item.class_name,
               classId: classInfo?.id || 0,
-              homeroomTeacherName: classInfo?.homeroom_teacher_id 
-                ? homeroomTeacherMap.get(classInfo.homeroom_teacher_id) 
+              homeroomTeacherName: classInfo?.homeroomTeacherId 
+                ? homeroomTeacherMap.get(classInfo.homeroomTeacherId) 
                 : undefined,
               subjects: new Map()
             });
@@ -206,18 +242,18 @@ const SubjectRankingAnalysis = () => {
           const teacherKey = `${classData.classId}_${subjectId}`;
           const teacherName = subjectTeacherMap.get(teacherKey);
           
-          if (!classData.subjects.has(item.subject_name)) {
-            classData.subjects.set(item.subject_name, {
-              score: item.average_score,
-              teacherName: teacherName,
-            });
-          }
+          // rank_in_subject 是跨所有学校的排名
+          classData.subjects.set(item.subject_name, {
+            score: item.average_score,
+            rank: item.rank_in_subject,
+            teacherName: teacherName,
+          });
         });
         
-        // 获取班级总分平均分数据
-        const totalScoreData = await getClassTotalScoreAverages([selectedAssessment]);
+        // 获取班级总分平均分数据（跨所有学校排名）
+        const totalScoreData = await getClassTotalScoreAverages(selectedExamData.assessmentIds);
         
-        // 创建班级总分平均分映射
+        // 创建班级总分平均分映射（rank_in_grade是跨所有学校的排名）
         const totalScoreMap = new Map<string, { avgScore: number; rank: number; studentCount: number }>();
         totalScoreData.forEach((item: any) => {
           const key = `${item.school_name}_${item.class_name}`;
@@ -228,10 +264,55 @@ const SubjectRankingAnalysis = () => {
           });
         });
         
+        const totalClasses = classMap.size;
+        
+        // 计算每个科目的总班级数
+        const subjectClassCounts = new Map<string, number>();
+        classMap.forEach(classData => {
+          classData.subjects.forEach((_, subjectName) => {
+            subjectClassCounts.set(subjectName, (subjectClassCounts.get(subjectName) || 0) + 1);
+          });
+        });
+        
         const rankings: ClassRankingData[] = [];
         classMap.forEach((classData) => {
           const classKey = `${classData.schoolName}_${classData.className}`;
           const totalScoreInfo = totalScoreMap.get(classKey);
+          
+          const subjectRankingsList: SubjectRanking[] = [];
+          
+          classData.subjects.forEach((subjectData, subjectName) => {
+            const classRank = totalScoreInfo?.rank || 0;
+            const rankDiff = subjectData.rank - classRank;
+            
+            // 修改判断逻辑：负值表示科目排名好于总分排名（值得表扬）
+            let status: 'excellent' | 'medium' | 'poor' = 'medium';
+            if (rankDiff <= -3) {
+              status = 'excellent'; // 科目排名比总分排名高3位及以上 = 优秀
+            } else if (rankDiff <= -1) {
+              status = 'medium'; // 科目排名比总分排名高1-2位 = 良好
+            } else if (rankDiff === 0) {
+              status = 'medium'; // 相等
+            } else if (rankDiff >= 3) {
+              status = 'poor'; // 科目排名比总分排名低3位及以上 = 需关注
+            } else {
+              status = 'medium'; // 科目排名比总分排名低1-2位
+            }
+            
+            subjectRankingsList.push({
+              subjectName,
+              subjectRank: subjectData.rank,
+              classOverallRank: classRank,
+              rankDifference: rankDiff,
+              status,
+              averageScore: subjectData.score,
+              teacherName: subjectData.teacherName,
+              totalClassCount: subjectClassCounts.get(subjectName) || totalClasses,
+            });
+          });
+          
+          // 统计优秀科目数量（值得表扬的）
+          const excellentCount = subjectRankingsList.filter(s => s.status === 'excellent').length;
           
           rankings.push({
             schoolName: classData.schoolName,
@@ -239,84 +320,15 @@ const SubjectRankingAnalysis = () => {
             classId: classData.classId,
             classAverageScore: totalScoreInfo?.avgScore || 0,
             classRank: totalScoreInfo?.rank || 0,
-            totalClasses: classMap.size,
-            subjectRankings: [],
-            problemSubjectCount: 0,
+            totalClasses,
+            subjectRankings: subjectRankingsList,
+            excellentSubjectCount: excellentCount,
             homeroomTeacherName: classData.homeroomTeacherName,
           });
         });
         
-        // 按总分平均分排序
-        rankings.sort((a, b) => b.classAverageScore - a.classAverageScore);
-        
-        const subjectRankings = new Map<string, Array<{
-          classKey: string;
-          score: number;
-          classOverallRank: number;
-          teacherName?: string;
-        }>>();
-        
-        rankings.forEach(classRanking => {
-          const classData = classMap.get(`${classRanking.schoolName}_${classRanking.className}`)!;
-          classData.subjects.forEach((subjectData, subjectName) => {
-            if (!subjectRankings.has(subjectName)) {
-              subjectRankings.set(subjectName, []);
-            }
-            subjectRankings.get(subjectName)!.push({
-              classKey: `${classRanking.schoolName}_${classRanking.className}`,
-              score: subjectData.score,
-              classOverallRank: classRanking.classRank,
-              teacherName: subjectData.teacherName,
-            });
-          });
-        });
-        
-        const subjectRankMap = new Map<string, Map<string, number>>();
-        subjectRankings.forEach((classes, subjectName) => {
-          classes.sort((a, b) => b.score - a.score);
-          const rankMap = new Map<string, number>();
-          classes.forEach((cls, idx) => {
-            rankMap.set(cls.classKey, idx + 1);
-          });
-          subjectRankMap.set(subjectName, rankMap);
-        });
-        
-        rankings.forEach(classRanking => {
-          const classKey = `${classRanking.schoolName}_${classRanking.className}`;
-          const classData = classMap.get(classKey)!;
-          const subjectRankingsList: SubjectRanking[] = [];
-          
-          classData.subjects.forEach((subjectData, subjectName) => {
-            const subjectRank = subjectRankMap.get(subjectName)?.get(classKey) || 0;
-            const rankDiff = subjectRank - classRanking.classRank;
-            
-            let status: 'excellent' | 'medium' | 'poor' = 'excellent';
-            if (rankDiff >= 3) {
-              status = 'poor';
-            } else if (rankDiff >= 1) {
-              status = 'medium';
-            } else if (rankDiff <= -3) {
-              status = 'excellent';
-            } else {
-              status = 'medium';
-            }
-            
-            subjectRankingsList.push({
-              subjectName,
-              subjectRank,
-              classOverallRank: classRanking.classRank,
-              rankDifference: rankDiff,
-              status,
-              averageScore: subjectData.score,
-              teacherName: subjectData.teacherName,
-            });
-          });
-          
-          const problemCount = subjectRankingsList.filter(s => s.status === 'poor').length;
-          
-          classRanking.subjectRankings = subjectRankingsList;
-          classRanking.problemSubjectCount = problemCount;
-        });
+        // 默认按优秀科目数量排序
+        rankings.sort((a, b) => b.excellentSubjectCount - a.excellentSubjectCount);
         
         setClassRankings(rankings);
       } catch (err: any) {
@@ -328,23 +340,25 @@ const SubjectRankingAnalysis = () => {
     };
     
     fetchRankingData();
-  }, [selectedAssessment, selectedSchool, schools, assessments]);
+  }, [selectedExam, exams]);
 
   const getFilteredAndSortedData = () => {
     let filtered = classRankings.map(cr => ({
       ...cr,
       subjectRankings: cr.subjectRankings.filter(sr => selectedSubjects.has(sr.subjectName)),
+      excellentSubjectCount: cr.subjectRankings.filter(sr => selectedSubjects.has(sr.subjectName) && sr.status === 'excellent').length,
     }));
     
     switch (sortOption) {
       case 'avgAsc':
         filtered.sort((a, b) => a.classAverageScore - b.classAverageScore);
         break;
-      case 'problemDesc':
-        filtered.sort((a, b) => b.problemSubjectCount - a.problemSubjectCount);
-        break;
-      default:
+      case 'avgDesc':
         filtered.sort((a, b) => b.classAverageScore - a.classAverageScore);
+        break;
+      case 'excellentDesc':
+        filtered.sort((a, b) => b.excellentSubjectCount - a.excellentSubjectCount);
+        break;
     }
     
     return filtered;
@@ -382,7 +396,7 @@ const SubjectRankingAnalysis = () => {
   const getStatusIcon = (status: 'excellent' | 'medium' | 'poor') => {
     switch (status) {
       case 'excellent':
-        return <TrendingUp className="h-4 w-4" />;
+        return <Star className="h-4 w-4 fill-current" />;
       case 'medium':
         return <Minus className="h-4 w-4" />;
       case 'poor':
@@ -393,43 +407,44 @@ const SubjectRankingAnalysis = () => {
   const getStatusText = (status: 'excellent' | 'medium' | 'poor') => {
     switch (status) {
       case 'excellent':
-        return '优';
+        return '表扬';
       case 'medium':
-        return '中';
+        return '正常';
       case 'poor':
-        return '差';
+        return '关注';
     }
   };
 
-  const selectedAssessmentData = assessments.find(a => a.id === selectedAssessment);
+  const selectedExamData = exams.find(e => e.key === selectedExam);
   const displayData = getFilteredAndSortedData();
 
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header Section */}
       <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-6 rounded-lg border border-primary/20 shadow-sm">
-        <h2 className="text-3xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-          各科平均分排名
+        <h2 className="text-3xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent flex items-center gap-3">
+          <Award className="h-8 w-8 text-primary" />
+          各科优秀教师表扬
         </h2>
         <p className="text-muted-foreground mt-2">
-          分析各班级在不同科目的排名表现，识别需要改进的教学环节
+          分析各班级各科目表现，表扬科目排名优于班级总分排名的教师（跨所有学校排名）
         </p>
-        {selectedAssessmentData && (
+        {selectedExamData && (
           <div className="flex gap-4 mt-4 flex-wrap">
             <Badge variant="secondary" className="text-sm px-3 py-1">
-              学校: {schools.find(s => s.id === selectedSchool)?.name}
+              考试: {selectedExamData.academic_year}年{selectedExamData.month}月{selectedExamData.type}
             </Badge>
             <Badge variant="secondary" className="text-sm px-3 py-1">
-              考试: {selectedAssessmentData.academic_year}年{selectedAssessmentData.month}月{selectedAssessmentData.type}
+              年级: {selectedExamData.grade_level}
             </Badge>
             <Badge variant="secondary" className="text-sm px-3 py-1">
-              年级: {selectedAssessmentData.grade_level}
+              学校: {selectedExamData.schoolNames.join(', ')}
             </Badge>
           </div>
         )}
       </div>
 
-      {/* Filters Section - Horizontal Layout */}
+      {/* Filters Section */}
       <Card className="shadow-lg border-muted/40">
         <CardHeader className="bg-gradient-to-r from-muted/50 to-transparent">
           <CardTitle className="text-lg flex items-center gap-2">
@@ -438,45 +453,21 @@ const SubjectRankingAnalysis = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* School Select */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-muted-foreground">学校</label>
-              <Select
-                value={selectedSchool?.toString()}
-                onValueChange={(value) => setSelectedSchool(Number(value))}
-              >
-                <SelectTrigger className="hover:border-primary/50 transition-colors">
-                  <SelectValue placeholder="选择学校" />
-                </SelectTrigger>
-                <SelectContent>
-                  {schools.map((school) => (
-                    <SelectItem key={school.id} value={school.id.toString()}>
-                      {school.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Assessment Select */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Exam Select */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-muted-foreground">考试</label>
               <Select
-                value={selectedAssessment?.toString()}
-                onValueChange={(value) => {
-                  const assessment = assessments.find(a => a.id === Number(value));
-                  setSelectedAssessment(Number(value));
-                  if (assessment) setGradeLevel(assessment.grade_level);
-                }}
+                value={selectedExam || ''}
+                onValueChange={(value) => setSelectedExam(value)}
               >
                 <SelectTrigger className="hover:border-primary/50 transition-colors">
                   <SelectValue placeholder="选择考试" />
                 </SelectTrigger>
                 <SelectContent>
-                  {assessments.map((assessment) => (
-                    <SelectItem key={assessment.id} value={assessment.id.toString()}>
-                      {assessment.academic_year}年{assessment.month}月{assessment.type}
+                  {exams.map((exam) => (
+                    <SelectItem key={exam.key} value={exam.key}>
+                      {exam.academic_year}年{exam.month}月{exam.type} - {exam.grade_level} ({exam.schoolNames.length}所学校)
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -491,14 +482,14 @@ const SubjectRankingAnalysis = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="excellentDesc">表扬科目数降序</SelectItem>
                   <SelectItem value="avgDesc">平均分降序</SelectItem>
                   <SelectItem value="avgAsc">平均分升序</SelectItem>
-                  <SelectItem value="problemDesc">问题科目数降序</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Subject Selection - Combobox */}
+            {/* Subject Selection */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-muted-foreground">科目</label>
               <Popover>
@@ -597,7 +588,7 @@ const SubjectRankingAnalysis = () => {
             <Button
               variant="outline"
               className="mt-4"
-              onClick={() => setSelectedAssessment(selectedAssessment)}
+              onClick={() => setSelectedExam(selectedExam)}
             >
               重试
             </Button>
@@ -624,18 +615,19 @@ const SubjectRankingAnalysis = () => {
                   </CardTitle>
                   <div className="flex items-center gap-2">
                     <Badge variant="secondary" className="shadow-sm">
-                      排名 {classData.classRank}/{classData.totalClasses}
+                      总分排名 {classData.classRank}/{classData.totalClasses}
                     </Badge>
-                    {classData.problemSubjectCount > 0 && (
-                      <Badge variant="destructive" className="shadow-sm animate-pulse">
-                        {classData.problemSubjectCount}个问题科目
+                    {classData.excellentSubjectCount > 0 && (
+                      <Badge className="shadow-sm bg-green-500 hover:bg-green-600 animate-pulse">
+                        <Star className="h-3 w-3 mr-1 fill-current" />
+                        {classData.excellentSubjectCount}个表扬科目
                       </Badge>
                     )}
                   </div>
                 </div>
                 <div className="text-sm text-muted-foreground space-y-1 mt-2">
                   <div className="flex items-center gap-2">
-                    <span>班级平均分:</span>
+                    <span>班级总分平均:</span>
                     <span className="font-semibold text-primary text-base">{classData.classAverageScore}</span>
                   </div>
                   {classData.homeroomTeacherName && (
@@ -648,23 +640,31 @@ const SubjectRankingAnalysis = () => {
               </CardHeader>
               <CardContent className="pt-4">
                 <div className="space-y-2">
-                  <div className="grid grid-cols-6 gap-2 text-xs font-medium text-muted-foreground pb-2 border-b bg-muted/30 p-2 rounded-t">
+                  <div className="grid grid-cols-7 gap-2 text-xs font-medium text-muted-foreground pb-2 border-b bg-muted/30 p-2 rounded-t">
                     <div>科目</div>
                     <div className="text-center">任课教师</div>
                     <div className="text-center">科目排名</div>
                     <div className="text-center">总分排名</div>
+                    <div className="text-center">总班级数</div>
                     <div className="text-center">差值</div>
                     <div className="text-center">状态</div>
                   </div>
                   {classData.subjectRankings.map((subject) => (
                     <div
                       key={`${classData.schoolName}_${classData.className}_${subject.subjectName}`}
-                      className="grid grid-cols-6 gap-2 text-sm py-3 border-b last:border-0 items-center hover:bg-muted/50 transition-colors rounded px-2"
+                      className={cn(
+                        "grid grid-cols-7 gap-2 text-sm py-3 border-b last:border-0 items-center transition-colors rounded px-2",
+                        subject.status === 'excellent' ? 'bg-green-50/50 hover:bg-green-50' : 'hover:bg-muted/50'
+                      )}
                     >
-                      <div className="font-medium">{subject.subjectName}</div>
+                      <div className="font-medium flex items-center gap-1">
+                        {subject.status === 'excellent' && <Star className="h-3 w-3 text-green-600 fill-current" />}
+                        {subject.subjectName}
+                      </div>
                       <div className="text-center text-xs">{subject.teacherName || '-'}</div>
                       <div className="text-center font-semibold">{subject.subjectRank}</div>
                       <div className="text-center text-muted-foreground">{subject.classOverallRank}</div>
+                      <div className="text-center text-muted-foreground">{subject.totalClassCount}</div>
                       <div className={`text-center font-bold ${
                         subject.rankDifference <= -3 ? 'text-green-600' :
                         subject.rankDifference < 0 ? 'text-green-500' :
@@ -673,7 +673,7 @@ const SubjectRankingAnalysis = () => {
                         'text-red-600'
                       }`}>
                         {subject.rankDifference > 0 ? '+' : ''}{subject.rankDifference}
-                        {subject.rankDifference > 0 ? ' ↓' : subject.rankDifference < 0 ? ' ↑' : ' '}
+                        {subject.rankDifference > 0 ? ' ↓' : subject.rankDifference < 0 ? ' ↑' : ''}
                       </div>
                       <div className="flex justify-center">
                         <Badge className={`${getStatusColor(subject.status)} gap-1 border shadow-sm`}>
