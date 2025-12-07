@@ -65,6 +65,7 @@ const SubjectRankingAnalysis = () => {
   
   const [exams, setExams] = useState<ExamGroup[]>([]);
   const [selectedExam, setSelectedExam] = useState<string | null>(null);
+  const [selectedSchool, setSelectedSchool] = useState<string>('all');
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [selectedSubjects, setSelectedSubjects] = useState<Set<string>>(new Set());
   const [sortOption, setSortOption] = useState<SortOption>('excellentDesc');
@@ -343,11 +344,13 @@ const SubjectRankingAnalysis = () => {
   }, [selectedExam, exams]);
 
   const getFilteredAndSortedData = () => {
-    let filtered = classRankings.map(cr => ({
-      ...cr,
-      subjectRankings: cr.subjectRankings.filter(sr => selectedSubjects.has(sr.subjectName)),
-      excellentSubjectCount: cr.subjectRankings.filter(sr => selectedSubjects.has(sr.subjectName) && sr.status === 'excellent').length,
-    }));
+    let filtered = classRankings
+      .filter(cr => selectedSchool === 'all' || cr.schoolName === selectedSchool)
+      .map(cr => ({
+        ...cr,
+        subjectRankings: cr.subjectRankings.filter(sr => selectedSubjects.has(sr.subjectName)),
+        excellentSubjectCount: cr.subjectRankings.filter(sr => selectedSubjects.has(sr.subjectName) && sr.status === 'excellent').length,
+      }));
     
     switch (sortOption) {
       case 'avgAsc':
@@ -363,6 +366,7 @@ const SubjectRankingAnalysis = () => {
     
     return filtered;
   };
+
 
   const toggleSubject = (subjectName: string) => {
     const newSet = new Set(selectedSubjects);
@@ -416,6 +420,7 @@ const SubjectRankingAnalysis = () => {
   };
 
   const selectedExamData = exams.find(e => e.key === selectedExam);
+  const availableSchools = selectedExamData?.schoolNames || [];
   const displayData = getFilteredAndSortedData();
 
   return (
@@ -453,13 +458,16 @@ const SubjectRankingAnalysis = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {/* Exam Select */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-muted-foreground">考试</label>
               <Select
                 value={selectedExam || ''}
-                onValueChange={(value) => setSelectedExam(value)}
+                onValueChange={(value) => {
+                  setSelectedExam(value);
+                  setSelectedSchool('all');
+                }}
               >
                 <SelectTrigger className="hover:border-primary/50 transition-colors">
                   <SelectValue placeholder="选择考试" />
@@ -468,6 +476,27 @@ const SubjectRankingAnalysis = () => {
                   {exams.map((exam) => (
                     <SelectItem key={exam.key} value={exam.key}>
                       {exam.academic_year}年{exam.month}月{exam.type} - {exam.grade_level} ({exam.schoolNames.length}所学校)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* School Filter */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-muted-foreground">学校</label>
+              <Select
+                value={selectedSchool}
+                onValueChange={(value) => setSelectedSchool(value)}
+              >
+                <SelectTrigger className="hover:border-primary/50 transition-colors">
+                  <SelectValue placeholder="选择学校" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部学校</SelectItem>
+                  {availableSchools.map((schoolName) => (
+                    <SelectItem key={schoolName} value={schoolName}>
+                      {schoolName}
                     </SelectItem>
                   ))}
                 </SelectContent>
