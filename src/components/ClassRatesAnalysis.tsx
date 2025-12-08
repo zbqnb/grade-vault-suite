@@ -200,26 +200,14 @@ const ClassRatesAnalysis = () => {
     setLoading(true);
     
     try {
-      // 获取当前选中的考试信息，用于筛选对应年级和学年的班级
-      const currentAssessment = assessments.find(a => a.id === selectedAssessment);
-      if (!currentAssessment) {
-        toast({ title: "找不到考试信息", variant: "destructive" });
-        return;
-      }
-      
       // 按照SQL逻辑：通过JOIN获取参加考试的学生及其总分
-      // Step 1: 获取该学校对应年级和学年的班级
+      // Step 1: 获取该学校的所有班级
       const { data: classesData, error: classError } = await supabase
         .from('classes')
-        .select('id, name, homeroom_teacher_id, grade_level, academic_year')
-        .eq('school_id', selectedSchool)
-        .eq('grade_level', currentAssessment.grade_level)
-        .eq('academic_year', currentAssessment.academic_year);
+        .select('id, name, homeroom_teacher_id')
+        .eq('school_id', selectedSchool);
       
       if (classError) throw classError;
-      
-      console.log(`筛选条件 - 学校: ${selectedSchool}, 年级: ${currentAssessment.grade_level}, 学年: ${currentAssessment.academic_year}`);
-      console.log(`匹配的班级数量: ${classesData?.length || 0}`);
       
       const classIds = classesData?.map(c => c.id) || [];
       if (classIds.length === 0) {
