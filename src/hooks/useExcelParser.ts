@@ -185,7 +185,8 @@ export const useExcelParser = () => {
         academic_year: metadata.academicYear,
         grade_level: metadata.gradeLevel,
       })))].map(s => JSON.parse(s));
-      const { error: classesError } = await supabase.from('classes').upsert(uniqueClasses, { onConflict: 'school_id,academic_year,grade_level,name' });
+      // 使用与数据库唯一约束匹配的冲突列: name, school_id, academic_year
+      const { error: classesError } = await supabase.from('classes').upsert(uniqueClasses, { onConflict: 'name,school_id,academic_year' });
       if (classesError) throw classesError;
       
       // 5. 準備並批量 Upsert 學生 (Students)
