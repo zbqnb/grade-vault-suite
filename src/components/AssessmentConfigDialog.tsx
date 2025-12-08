@@ -157,7 +157,10 @@ export const AssessmentConfigDialog = ({ open, assessmentIds, onClose, onSuccess
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor={`excellent_${subject.id}`}>优秀分数线</Label>
+                      <Label htmlFor={`excellent_${subject.id}`} className="flex items-center gap-2">
+                        优秀分数线
+                        <span className="text-xs text-muted-foreground font-normal">(百分比 %)</span>
+                      </Label>
                       <Input
                         id={`excellent_${subject.id}`}
                         type="number"
@@ -166,7 +169,10 @@ export const AssessmentConfigDialog = ({ open, assessmentIds, onClose, onSuccess
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor={`pass_${subject.id}`}>及格分数线</Label>
+                      <Label htmlFor={`pass_${subject.id}`} className="flex items-center gap-2">
+                        及格分数线
+                        <span className="text-xs text-muted-foreground font-normal">(百分比 %)</span>
+                      </Label>
                       <Input
                         id={`pass_${subject.id}`}
                         type="number"
@@ -175,7 +181,10 @@ export const AssessmentConfigDialog = ({ open, assessmentIds, onClose, onSuccess
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor={`poor_${subject.id}`}>差生分数线</Label>
+                      <Label htmlFor={`poor_${subject.id}`} className="flex items-center gap-2">
+                        差生分数线
+                        <span className="text-xs text-muted-foreground font-normal">(百分比 %)</span>
+                      </Label>
                       <Input
                         id={`poor_${subject.id}`}
                         type="number"
