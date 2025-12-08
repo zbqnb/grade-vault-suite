@@ -72,6 +72,8 @@ const ClassRatesAnalysis = () => {
   const [selectedSchool, setSelectedSchool] = useState<number | null>(null);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [selectedAssessment, setSelectedAssessment] = useState<number | null>(null);
+  const [availableGrades, setAvailableGrades] = useState<string[]>([]);
+  const [selectedGrade, setSelectedGrade] = useState<string | null>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<string>('total'); // 'total' or subject id
   
@@ -109,14 +111,42 @@ const ClassRatesAnalysis = () => {
         toast({ title: "加载考试失败", description: error.message, variant: "destructive" });
       } else if (data) {
         setAssessments(data);
-        if (data.length > 0) {
-          setSelectedAssessment(data[0].id);
+        // 提取可用年级列表
+        const grades = [...new Set(data.map(a => a.grade_level))];
+        setAvailableGrades(grades);
+        
+        if (grades.length > 0) {
+          setSelectedGrade(grades[0]);
+        } else {
+          setSelectedGrade(null);
+          setSelectedAssessment(null);
         }
       }
     };
     
     fetchAssessments();
   }, [selectedSchool]);
+
+  // 当年级改变时，更新选中的考试
+  useEffect(() => {
+    if (!selectedGrade) {
+      setSelectedAssessment(null);
+      return;
+    }
+    
+    const filteredAssessments = assessments.filter(a => a.grade_level === selectedGrade);
+    if (filteredAssessments.length > 0) {
+      setSelectedAssessment(filteredAssessments[0].id);
+    } else {
+      setSelectedAssessment(null);
+    }
+  }, [selectedGrade, assessments]);
+
+  // 根据年级过滤的考试列表
+  const filteredAssessments = useMemo(() => {
+    if (!selectedGrade) return assessments;
+    return assessments.filter(a => a.grade_level === selectedGrade);
+  }, [assessments, selectedGrade]);
 
   // Load subjects
   useEffect(() => {
@@ -200,18 +230,30 @@ const ClassRatesAnalysis = () => {
     setLoading(true);
     
     try {
+      // 获取当前选中考试的学年和年级
+      const currentAssessment = assessments.find(a => a.id === selectedAssessment);
+      if (!currentAssessment) {
+        toast({ title: "请选择考试", variant: "destructive" });
+        setLoading(false);
+        return;
+      }
+      
       // 按照SQL逻辑：通过JOIN获取参加考试的学生及其总分
-      // Step 1: 获取该学校的所有班级
+      // Step 1: 获取该学校、学年、年级的班级
       const { data: classesData, error: classError } = await supabase
         .from('classes')
         .select('id, name, homeroom_teacher_id')
-        .eq('school_id', selectedSchool);
+        .eq('school_id', selectedSchool)
+        .eq('academic_year', currentAssessment.academic_year)
+        .eq('grade_level', currentAssessment.grade_level);
       
       if (classError) throw classError;
       
       const classIds = classesData?.map(c => c.id) || [];
       if (classIds.length === 0) {
         setClassRates([]);
+        toast({ title: "没有找到匹配的班级", description: `学年: ${currentAssessment.academic_year}, 年级: ${currentAssessment.grade_level}`, variant: "default" });
+        setLoading(false);
         return;
       }
       
@@ -492,7 +534,7 @@ const ClassRatesAnalysis = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             {/* School */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-muted-foreground">学校</label>
@@ -513,19 +555,40 @@ const ClassRatesAnalysis = () => {
               </Select>
             </div>
 
+            {/* Grade Level */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-muted-foreground">年级</label>
+              <Select
+                value={selectedGrade || ''}
+                onValueChange={setSelectedGrade}
+                disabled={!selectedSchool || availableGrades.length === 0}
+              >
+                <SelectTrigger className="hover:border-primary/50 transition-colors">
+                  <SelectValue placeholder="选择年级" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableGrades.map((grade) => (
+                    <SelectItem key={grade} value={grade}>
+                      {grade}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Assessment */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-muted-foreground">考试</label>
               <Select
                 value={selectedAssessment?.toString()}
                 onValueChange={(v) => setSelectedAssessment(Number(v))}
-                disabled={!selectedSchool}
+                disabled={!selectedSchool || !selectedGrade}
               >
                 <SelectTrigger className="hover:border-primary/50 transition-colors">
                   <SelectValue placeholder="选择考试" />
                 </SelectTrigger>
                 <SelectContent>
-                  {assessments.map((assessment) => (
+                  {filteredAssessments.map((assessment) => (
                     <SelectItem key={assessment.id} value={assessment.id.toString()}>
                       {assessment.academic_year} - {assessment.month}月 - {assessment.type}
                     </SelectItem>
